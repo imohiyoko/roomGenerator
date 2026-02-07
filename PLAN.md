@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>間取りアーキテクト Pro v6.1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; user-select: none; overflow: hidden; }
+        .grid-bg { 
+            background-color: #f8fafc;
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        .design-grid {
+            background-color: #fff7ed;
+            background-image: 
+                linear-gradient(to right, #fed7aa 1px, transparent 1px),
+                linear-gradient(to bottom, #fed7aa 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 3px; }
+        
+        /* 共通UIパーツ */
+        .sidebar-header {
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: #4b5563;
+            padding: 0.75rem;
+            border-bottom: 1px solid #e5e7eb;
+            background-color: #f9fafb;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .prop-row {
+            display: grid;
+            grid-template-columns: 80px 1fr;
+            gap: 0.5rem;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        .prop-label {
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: #6b7280;
+            text-align: right;
+        }
+        .prop-input {
+            width: 100%;
+            border: 1px solid #d1d5db;
+            border-radius: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.85rem;
+            text-align: right;
+            background-color: white;
+        }
+        .prop-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+        .btn-action {
+            width: 100%;
+            padding: 0.4rem;
+            font-size: 0.8rem;
+            font-weight: bold;
+            border-radius: 0.25rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen text-gray-700">
+    <div id="root" class="h-full flex flex-col"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo, useCallback } = React;
+        // --- 設定 ---
+        const BASE_SCALE = 2.0; 
+        const SNAP_UNIT = 5;
+        const LAYERS = { room: 0, fixture: 1, furniture: 2, text: 3 };
+        const toMM = (val) => Math.round(val * 10);
+        const fromMM = (val) => val / 10;
+        
+        // --- アイコン (SVG) ---
+        const Icon = ({ p, size=18, className="" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{p}</svg>
+        );
+        const Icons = {
+            Home: <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
+            Plus: <path d="M12 5v14M5 12h14"/>,
+            Trash: <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>,
+            Move: <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M19 9l3 3-3 3M9 19l3 3 3-3M2 12h20M12 2v20"/>,
+            Pen: <path d="M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5zM2 2l7.586 7.586"/>,
+            Type: <path d="M4 7V4h16v3M9 20h6M12 4v16"/>,
+            Check: <path d="M20 6L9 17l-5-5"/>,
+            LogOut: <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>,
+            Folder: <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>,
+            ZoomIn: <g><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></g>,
+            ZoomOut: <g><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></g>,
+            Lock: <g><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></g>,
+            Unlock: <g><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></g>,
+            Globe: <g><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/></g>,
+            Settings: <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.18-.08a2 2 0 0 0-2 0l-.45.45a2 2 0 0 0 0 2l.08.18a2 2 0 0 1 0 2l-.25.43a2 2 0 0 1-1-1.73 1H2a2 2 0 0 0-2 2v.44a2 2 0 0 0 2 2h.18a2 2 0 0 1 1.73 1l.25.43a2 2 0 0 1 0 2l-.08.18a2 2 0 0 0 0 2l.45.45a2 2 0 0 0 2 0l.18-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V2a2 2 0 0 0-2-2z"/>,
+            Poly: <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>,
+            Circle: <circle cx="12" cy="12" r="10"/>,
+            Square: <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>,
+            ArrowUpRight: <path d="M7 17l9.2-9.2M17 17V7H7"/>,
+            Target: <g><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></g>,
+            Box: <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>,
+            Copy: <g><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></g>,
+            Magnet: <g><path d="M6 15v-5a6 6 0 1 1 12 0v5" strokeWidth="2"/><path d="M6 15h4v4h-4z" fill="currentColor"/><path d="M14 15h4v4h-4z" fill="currentColor"/></g>
+        };
+
+        // --- API ---
+        const API = {
+            getAssets: () => fetch('/api/assets').then(r => r.json()),
+            saveAssets: (d) => fetch('/api/assets', { method: 'POST', body: JSON.stringify(d) }),
+            getProjects: () => fetch('/api/projects').then(r => r.json()),
+            createProject: (name) => fetch('/api/projects', { method: 'POST', body: JSON.stringify({ name }) }).then(r => r.json()),
+            getProjectData: (id) => fetch(`/api/projects/${id}`).then(r => r.json()),
+            saveProjectData: (id, d) => fetch(`/api/projects/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+            deleteProject: (id) => fetch(`/api/projects/${id}`, { method: 'DELETE' }),
+            updateProjectName: (id, name) => fetch(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+        };
+
+        // --- Utils ---
+        const createRectPath = (w, h, x=0, y=0) => [
+            { x: x, y: y, h1:{x:0,y:0}, h2:{x:0,y:0}, isCurve: false },
+            { x: x+w, y: y, h1:{x:0,y:0}, h2:{x:0,y:0}, isCurve: false },
+            { x: x+w, y: y+h, h1:{x:0,y:0}, h2:{x:0,y:0}, isCurve: false },
+            { x: x, y: y+h, h1:{x:0,y:0}, h2:{x:0,y:0}, isCurve: false },
+        ];
+        const normalizeAsset = (asset) => {
+            if (!asset) return null;
+            let shapes = asset.shapes || [];
+            if (shapes.length === 0) {
+                if (asset.shape === 'rect' || !asset.shape) {
+                     shapes.push({ type: 'polygon', points: createRectPath(asset.w || 60, asset.h || 60), color: asset.color });
+                } else if (asset.shape === 'polygon' && asset.points) {
+                     const pts = asset.points.map(p => ({ x:p.x, y:p.y, h1:{x:0,y:0}, h2:{x:0,y:0}, isCurve:false }));
+                     shapes.push({ type: 'polygon', points: pts, color: asset.color });
+                } else if (asset.shape === 'circle') {
+                     shapes.push({ type: 'circle', x:0, y:0, w: asset.w||60, h: asset.h||60, color: asset.color });
+                }
+            }
+            return { ...asset, shapes, w: asset.w || 60, h: asset.h || 60 };
+        };
+
+        const generateSvgPath = (points) => {
+            if (!points || points.length === 0) return "";
+            let d = `M ${points[0].x * BASE_SCALE} ${points[0].y * BASE_SCALE}`;
+            for (let i = 0; i < points.length; i++) {
+                const curr = points[i];
+                const next = points[(i + 1) % points.length];
+                if (curr.isCurve || next.isCurve) {
+                    const cp1x = (curr.x + (curr.h2?.x || 0)) * BASE_SCALE;
+                    const cp1y = (curr.y + (curr.h2?.y || 0)) * BASE_SCALE;
+                    const cp2x = (next.x + (next.h1?.x || 0)) * BASE_SCALE;
+                    const cp2y = (next.y + (next.h1?.y || 0)) * BASE_SCALE;
+                    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x * BASE_SCALE} ${next.y * BASE_SCALE}`;
+                } else {
+                    d += ` L ${next.x * BASE_SCALE} ${next.y * BASE_SCALE}`;
+                }
+            }
+            d += " Z";
+            return d;
+        };
+
+        const getClientPos = (e, viewState, svgRect) => {
+            const cx = e.clientX - svgRect.left;
+            const cy = e.clientY - svgRect.top;
+            const x = (cx - viewState.x) / viewState.scale / BASE_SCALE;
+            const y = (cy - viewState.y) / viewState.scale / BASE_SCALE;
+            return { x, y };
+        };
+
+        // --- Components ---
+        const ProjectCard = ({ project, onOpen, onDelete, onRename }) => {
+            const [name, setName] = useState(project.name);
+            useEffect(() => setName(project.name), [project.name]);
+            const handleBlur = () => { if(name !== project.name) onRename(project.id, name); };
+            const handleKeyDown = (e) => { if (e.key === 'Enter') e.currentTarget.blur(); };
+            return (
+                <div onClick={onOpen} className="h-40 bg-white border rounded-lg shadow-sm hover:shadow-md p-4 flex flex-col cursor-pointer relative group transition">
+                    <div className="flex-1 flex flex-col items-center justify-center">
+                        <Icon p={Icons.Folder} size={40} className="text-orange-200 mb-2"/>
+                        <input value={name} onClick={e => e.stopPropagation()} onChange={e => setName(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown} className="text-center font-bold text-lg w-full bg-transparent border-b border-transparent focus:border-blue-500 outline-none text-gray-700"/>
+                    </div>
+                    <button onClick={(e) => onDelete(e, project.id)} className="absolute top-2 right-2 p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><Icon p={Icons.Trash}/></button>
+                </div>
+            );
+        };
+        const EditableTitle = ({ name, onRename }) => {
+            const [val, setVal] = useState(name);
+            useEffect(() => setVal(name), [name]);
+            const handleBlur = () => { if(val !== name) onRename(val); };
+            const handleKeyDown = (e) => { if(e.key==='Enter') e.currentTarget.blur(); };
+            return <input value={val} onChange={e => setVal(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown} className="font-bold text-lg text-gray-800 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 outline-none px-1" style={{minWidth: '200px'}}/>;
+        };
+
+        const AssetFilter = ({ filter, setFilter }) => (
+            <div className="flex p-2 gap-1 bg-gray-50 border-b shrink-0">
+                <button onClick={() => setFilter('all')} className={`flex-1 py-1 text-[10px] rounded border transition ${filter === 'all' ? 'bg-white border-gray-300 shadow-sm font-bold text-gray-700' : 'border-transparent text-gray-400 hover:bg-gray-100'}`}>すべて</button>
+                <button onClick={() => setFilter('local')} className={`flex-1 py-1 text-[10px] rounded border transition ${filter === 'local' ? 'bg-white border-orange-300 shadow-sm font-bold text-orange-600' : 'border-transparent text-gray-400 hover:bg-gray-100'}`}>ローカル</button>
+                <button onClick={() => setFilter('global')} className={`flex-1 py-1 text-[10px] rounded border transition ${filter === 'global' ? 'bg-white border-blue-300 shadow-sm font-bold text-blue-600' : 'border-transparent text-gray-400 hover:bg-gray-100'}`}>共通</button>
+            </div>
+        );
+
+        // --- Main App ---
+        const App = () => {
+            const [view, setView] = useState('dashboard');
+            const [projects, setProjects] = useState([]);
+            const [currentProject, setCurrentProject] = useState(null);
+            const [globalAssets, setGlobalAssets] = useState([]);
+            const [error, setError] = useState(null);
+            
+            const loadProjects = useCallback(() => {
+                return API.getProjects()
+                    .then(res => {
+                        const data = res.data || res;
+                        setProjects(data);
+                        return data;
+                    })
+                    .catch(err => {
+                        setError('プロジェクト読み込みエラー: ' + err.message);
+                    });
+            }, []);
+            useEffect(() => { 
+                try {
+                    loadProjects(); 
+                    API.getAssets()
+                        .then(res => { 
+                            const data = res.data || res;
+                            if (!Array.isArray(data)) throw new Error('Assets is not an array');
+                            setGlobalAssets(data.map(normalizeAsset)); 
+                        })
+                        .catch(err => {
+                            setError('アセット読み込みエラー: ' + err.message);
+                        });
+                } catch (e) {
+                    setError('初期化エラー: ' + e.message);
+                }
+            }, [loadProjects]);
+            
+            const handleCreate = async () => {
+                const res = await API.createProject('新規物件');
+                const proj = res.data || res;
+                setProjects([...projects, proj]);
+                setCurrentProject(proj);
+                setView('editor');
+            };
+            const handleDelete = async (e, id) => { e.stopPropagation(); if(!confirm('削除しますか？')) return; await API.deleteProject(id); loadProjects(); };
+            const handleRename = async (id, name) => {
+                setProjects(projects.map(p => p.id === id ? { ...p, name } : p));
+                await API.updateProjectName(id, name);
+                if (currentProject && currentProject.id === id) setCurrentProject({ ...currentProject, name });
+            };
+            if (error) return (
+                <div className="w-full h-full flex items-center justify-center bg-red-50">
+                    <div className="bg-white p-8 rounded-lg shadow-lg max-w-md">
+                        <h2 className="text-red-600 font-bold mb-2">エラーが発生しました</h2>
+                        <p className="text-gray-700 mb-4">{error}</p>
+                        <button onClick={() => { setError(null); loadProjects(); }} className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">再試行</button>
+                    </div>
+                </div>
+            );
+
+            if (view === 'dashboard') {
+                return (
+                    <div className="p-10 max-w-5xl mx-auto h-full overflow-y-auto">
+                        <h1 className="text-2xl font-bold mb-6 flex items-center gap-2 text-gray-700"><Icon p={Icons.Home} size={28} className="text-blue-600"/> 物件管理</h1>
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <button onClick={handleCreate} className="h-40 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-500 hover:border-blue-500 hover:text-blue-600 hover:bg-blue-50 transition bg-white/50"><Icon p={Icons.Plus} size={32}/><span className="font-bold mt-2">新規作成</span></button>
+                            {projects.map(p => <ProjectCard key={p.id} project={p} onOpen={() => { setCurrentProject(p); setView('editor'); }} onDelete={handleDelete} onRename={handleRename}/>)}
+                        </div>
+                    </div>
+                );
+            }
+            return <Editor project={currentProject} globalAssets={globalAssets} setGlobalAssets={async (d) => { setGlobalAssets(d); await API.saveAssets(d); }} onBack={() => { loadProjects(); setView('dashboard'); }} onRenameProject={(name) => handleRename(currentProject.id, name)}/>;
+        };
+
+        // --- Editor Component ---
+        const Editor = ({ project, globalAssets, setGlobalAssets, onBack, onRenameProject }) => {
+            const [localAssets, setLocalAssets] = useState([]);
+            const [instances, setInstances] = useState([]);
+            const [mode, setMode] = useState('layout'); 
+            const [selectedIds, setSelectedIds] = useState([]);
+            const [viewState, setViewState] = useState({ scale: 0.8, x: 50, y: 50 });
+            const [saving, setSaving] = useState(false);
+            const [designTargetId, setDesignTargetId] = useState(null);
+            const [selectedShapeIndex, setSelectedShapeIndex] = useState(null);
+            const [selectedPointIndex, setSelectedPointIndex] = useState(null);
+            
+            const allAssets = useMemo(() => {
+                const combined = [...localAssets];
+                globalAssets.forEach(g => { if (!combined.find(l => l.id === g.id)) combined.push({ ...g, source: 'global' }); });
+                return combined.map(a => a.source ? a : { ...a, source: 'local' });
+            }, [localAssets, globalAssets]);
+
+            useEffect(() => { 
+                API.getProjectData(project.id).then(data => { 
+                    const res = data.data || data;
+                    setInstances(res.instances || []); 
+                    setLocalAssets((res.assets || []).map(normalizeAsset)); 
+                }); 
+            }, [project]);
+            
+            useEffect(() => {
+                const timer = setTimeout(async () => { setSaving(true); await API.saveProjectData(project.id, { assets: localAssets, instances }); setSaving(false); }, 1000);
+                return () => clearTimeout(timer);
+            }, [instances, localAssets]);
+
+            // Deleteキー処理
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if((e.key === 'Delete' || e.key === 'Backspace') && document.activeElement.tagName === 'BODY') {
+                        if (mode === 'layout') { 
+                            setInstances(p => p.filter(i => !selectedIds.includes(i.id))); 
+                            setSelectedIds([]); 
+                        }
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [selectedIds, mode]);
+
+            const addInstance = (assetId) => {
+                let targetAssetId = assetId;
+                const globalAsset = globalAssets.find(g => g.id === assetId);
+                
+                // グローバルアセットならローカルにコピーを作成してから追加
+                if (globalAsset) {
+                    const newId = `a-${Date.now()}`;
+                    const newAsset = { ...globalAsset, id: newId, source: 'local', name: globalAsset.name + '(個別)' };
+                    setLocalAssets(prev => [...prev, newAsset]);
+                    targetAssetId = newId;
+                }
+
+                // 画面中央に配置
+                const cx = (-viewState.x + (window.innerWidth - 256 - 288)/2) / viewState.scale / BASE_SCALE;
+                const cy = (-viewState.y + window.innerHeight/2) / viewState.scale / BASE_SCALE;
+                const newInstId = `i-${Date.now()}`;
+                const snapX = Math.round(cx / SNAP_UNIT) * SNAP_UNIT;
+                const snapY = Math.round(cy / SNAP_UNIT) * SNAP_UNIT;
+                setInstances(prev => [...prev, { id: newInstId, assetId: targetAssetId, x: snapX, y: snapY, rotation: 0, locked: false }]);
+                setSelectedIds([newInstId]);
+            };
+
+            const addText = () => {
+                const cx = (-viewState.x + (window.innerWidth - 256 - 288)/2) / viewState.scale / BASE_SCALE;
+                const cy = (-viewState.y + window.innerHeight/2) / viewState.scale / BASE_SCALE;
+                const newId = `t-${Date.now()}`;
+                setInstances([...instances, { id: newId, type: 'text', text: 'メモ', fontSize: 20, color: '#333', x: cx, y: cy, rotation: 0, locked: false }]);
+                setSelectedIds([newId]);
+            };
+
+            return (
+                <div className="flex flex-col h-screen">
+                    {/* ヘッダー */}
+                    <div className="h-12 bg-white border-b flex items-center justify-between px-4 z-20 shadow-sm shrink-0">
+                        <div className="flex items-center gap-4">
+                            <button onClick={onBack} className="text-gray-500 hover:text-gray-800 flex items-center gap-1 font-bold text-xs"><Icon p={Icons.LogOut} className="rotate-180"/> 戻る</button>
+                            <EditableTitle name={project.name} onRename={onRenameProject} />
+                            <div className="flex bg-gray-100 rounded p-1 ml-4">
+                                <button onClick={() => { setMode('layout'); setDesignTargetId(null); setSelectedIds([]); }} className={`px-3 py-1 rounded text-xs font-bold flex gap-1 items-center transition ${mode==='layout'?'bg-white shadow text-blue-600':'text-gray-500'}`}><Icon p={Icons.Move} size={14}/>配置</button>
+                                <button onClick={() => { setMode('design'); setSelectedIds([]); setSelectedShapeIndex(null); }} className={`px-3 py-1 rounded text-xs font-bold flex gap-1 items-center transition ${mode==='design'?'bg-white shadow text-orange-600':'text-gray-500'}`}><Icon p={Icons.Pen} size={14}/>設計</button>
+                            </div>
+                        </div>
+                        <div className="text-xs text-gray-400 flex items-center gap-2">{saving ? '保存中...' : <><Icon p={Icons.Check} size={14} className="text-green-500"/> 保存済</>}</div>
+                    </div>
+
+                    <div className="flex-1 flex overflow-hidden">
+                        {/* 左サイドバー (共通化) */}
+                        <div className="w-64 bg-white border-r flex flex-col z-10 overflow-y-auto shrink-0 shadow-lg">
+                            <UnifiedSidebar 
+                                mode={mode}
+                                assets={allAssets} 
+                                onAddInstance={addInstance} 
+                                onAddText={addText}
+                                setLocalAssets={setLocalAssets}
+                                setGlobalAssets={setGlobalAssets}
+                                setDesignTargetId={setDesignTargetId}
+                                designTargetId={designTargetId}
+                                instances={instances}
+                                setInstances={setInstances}
+                            />
+                        </div>
+
+                        {/* メインキャンバス */}
+                        <div className={`flex-1 relative overflow-hidden cursor-crosshair ${mode==='design'?'design-grid':'grid-bg'}`}>
+                            <Ruler viewState={viewState} />
+                            {mode === 'layout' ? (
+                                <LayoutCanvas viewState={viewState} setViewState={setViewState} assets={allAssets} instances={instances} setInstances={setInstances} selectedIds={selectedIds} setSelectedIds={setSelectedIds} />
+                            ) : (
+                                <DesignCanvas 
+                                    viewState={viewState} setViewState={setViewState} 
+                                    assets={allAssets} designTargetId={designTargetId} 
+                                    setLocalAssets={setLocalAssets}
+                                    selectedShapeIndex={selectedShapeIndex}
+                                    setSelectedShapeIndex={setSelectedShapeIndex}
+                                    selectedPointIndex={selectedPointIndex}
+                                    setSelectedPointIndex={setSelectedPointIndex}
+                                />
+                            )}
+                            <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-30">
+                                <button onClick={() => setViewState(p => ({...p, scale: Math.min(5, p.scale + 0.1)}))} className="p-2 bg-white rounded-full shadow hover:bg-gray-100"><Icon p={Icons.ZoomIn}/></button>
+                                <button onClick={() => setViewState(p => ({...p, scale: Math.max(0.1, p.scale - 0.1)}))} className="p-2 bg-white rounded-full shadow hover:bg-gray-100"><Icon p={Icons.ZoomOut}/></button>
+                            </div>
+                        </div>
+
+                        {/* 右サイドバー (構造を統一) */}
+                        <div className="w-72 bg-white border-l z-10 overflow-y-auto shrink-0 shadow-lg flex flex-col">
+                            {mode === 'layout' ? (
+                                <LayoutProperties 
+                                    instances={instances} setInstances={setInstances} 
+                                    selectedIds={selectedIds} assets={allAssets} 
+                                    setSelectedIds={setSelectedIds} setMode={setMode} 
+                                    setDesignTargetId={setDesignTargetId}
+                                />
+                            ) : (
+                                <DesignProperties 
+                                    assets={allAssets} designTargetId={designTargetId} 
+                                    setLocalAssets={setLocalAssets} setGlobalAssets={setGlobalAssets} 
+                                    selectedShapeIndex={selectedShapeIndex} setSelectedShapeIndex={setSelectedShapeIndex}
+                                    selectedPointIndex={selectedPointIndex} setSelectedPointIndex={setSelectedPointIndex}
+                                />
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Sidebars (Unified) ---
+        const UnifiedSidebar = ({ mode, assets, onAddInstance, onAddText, setLocalAssets, setGlobalAssets, setDesignTargetId, designTargetId, instances, setInstances }) => {
+            const [filter, setFilter] = useState('all');
+            
+            // フィルタリング
+            const filteredAssets = assets.filter(a => {
+                if (filter === 'all') return true;
+                return a.source === filter;
+            });
+
+            // 新規作成 (Design Mode用)
+            const addNewAsset = (target) => {
+                const initialShape = { type: 'rect', w: 60, h: 60, x: 0, y: 0, color: '#cccccc' };
+                const newA = { 
+                    id: `a-${Date.now()}`, name: '新規パーツ', type: target === 'global' ? 'furniture' : 'room', 
+                    w: 60, h: 60, color: '#cccccc', shape: 'rect', snap: true, 
+                    shapes: [initialShape]
+                };
+                if (target === 'global') setGlobalAssets(prev => [...prev, newA]);
+                else setLocalAssets(prev => [...prev, newA]);
+                setDesignTargetId(newA.id);
+            };
+
+            const handleClick = (asset) => {
+                if (mode === 'layout') {
+                    onAddInstance(asset.id);
+                } else {
+                    setDesignTargetId(asset.id);
+                }
+            };
+
+             const deleteAsset = (e, assetId, isGlobal) => {
+                e.stopPropagation();
+                const usageCount = instances.filter(inst => inst.assetId === assetId).length;
+                const message = usageCount > 0 
+                    ? `このアセットを削除しますか？\n配置済み: ${usageCount}個が削除されます。`
+                    : 'このアセットを削除しますか？';
+                if (!confirm(message)) return;
+                
+                if (isGlobal) {
+                    setGlobalAssets(prev => prev.filter(a => a.id !== assetId));
+                } else {
+                    setLocalAssets(prev => prev.filter(a => a.id !== assetId));
+                }
+                setInstances(prev => prev.filter(inst => inst.assetId !== assetId));
+                if (designTargetId === assetId) {
+                    setDesignTargetId(null);
+                }
+            };
+
+            return (
+                <div className="flex flex-col h-full bg-white">
+                    {/* Header Action Area */}
+                    <div className="p-3 pb-0">
+                        {mode === 'layout' ? (
+                             <button onClick={onAddText} className="w-full py-2 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded font-bold mb-2 flex items-center justify-center gap-2 hover:bg-yellow-100 transition text-xs"><Icon p={Icons.Type}/> 文字を追加</button>
+                        ) : (
+                            <div className="flex gap-2 text-xs mb-2">
+                                <button onClick={() => addNewAsset('local')} className="flex-1 py-2 bg-white border border-dashed border-orange-300 rounded text-orange-600 hover:bg-orange-50 font-bold">+ 新規(個別)</button>
+                                <button onClick={() => addNewAsset('global')} className="flex-1 py-2 bg-white border border-dashed border-blue-300 rounded text-blue-600 hover:bg-blue-50 font-bold">+ 新規(共通)</button>
+                            </div>
+                        )}
+                    </div>
+
+                    <AssetFilter filter={filter} setFilter={setFilter} />
+
+                    {/* Asset List (Grid) */}
+                    <div className="flex-1 overflow-y-auto p-3">
+                         {['room', 'fixture', 'furniture'].map(type => {
+                            const typeAssets = filteredAssets.filter(a => a.type === type);
+                            if (typeAssets.length === 0) return null;
+                            const label = type === 'room' ? '部屋' : type === 'fixture' ? '設備' : '家具';
+                            return (
+                                <div key={type} className="mb-6">
+                                    <div className="text-xs font-bold text-gray-400 mb-2 px-1 border-b pb-1 flex items-center gap-2">{label}</div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {typeAssets.map(a => {
+                                            const isSelected = mode === 'design' && designTargetId === a.id;
+                                            return (
+                                                <button key={a.id} onClick={() => handleClick(a)} 
+                                                    className={`flex flex-col items-center p-2 border rounded hover:bg-gray-50 text-center relative group transition
+                                                        ${a.source==='global' ? 'bg-blue-50/30 border-blue-100' : ''}
+                                                        ${isSelected ? 'ring-2 ring-orange-400 bg-orange-50' : ''}
+                                                    `}>
+                                                    {a.source === 'global' && <div className="absolute top-1 right-1 text-blue-400"><Icon p={Icons.Globe} size={10}/></div>}
+                                                    <div className="w-8 h-8 rounded mb-2 border shadow-sm flex items-center justify-center" style={{backgroundColor: a.color}}></div>
+                                                    <span className="text-[10px] w-full truncate font-medium text-gray-600">{a.name}</span>
+                                                    
+                                                    {/* Delete Button (Only visible in Design Mode or for cleanup) */}
+                                                    {mode === 'design' && (
+                                                        <div 
+                                                            onClick={(e) => deleteAsset(e, a.id, a.source === 'global')} 
+                                                            className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 p-1 transition"
+                                                        >
+                                                            <Icon p={Icons.Trash} size={12}/>
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+
+        // --- Properties Panels (Unified) ---
+
+        // 配置モード用プロパティ (設計モードのデザインに合わせる)
+        const LayoutProperties = ({ instances, setInstances, selectedIds, assets, setSelectedIds, setMode, setDesignTargetId }) => {
+            const item = instances.find(i => i.id === selectedIds[0]);
+
+            // 未選択時は簡易リスト表示
+            if (!item) {
+                 return (
+                    <div className="h-full flex flex-col text-gray-500 text-xs items-center justify-center p-4">
+                        <Icon p={Icons.Move} size={48} className="text-gray-200 mb-2"/>
+                        <p>キャンバス上のアイテムを選択すると<br/>詳細設定が表示されます</p>
+                        <div className="mt-8 w-full border-t pt-4">
+                            <p className="font-bold text-gray-400 mb-2 text-left w-full">配置済み ({instances.length})</p>
+                            <div className="space-y-1 max-h-60 overflow-y-auto w-full text-left">
+                                {instances.map(inst => {
+                                    const a = assets.find(x => x.id === inst.assetId);
+                                    return (
+                                        <div key={inst.id} onClick={() => setSelectedIds([inst.id])} className="p-2 border rounded hover:bg-gray-50 cursor-pointer flex items-center justify-between">
+                                            <span className="truncate">{a ? a.name : inst.text}</span>
+                                            <span className="text-[10px] text-gray-300">{inst.id.slice(-4)}</span>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            const update = (k, v) => setInstances(p => p.map(i => i.id === item.id ? { ...i, [k]: v } : i));
+
+            // グループ整列機能
+            const alignToOrigin = () => {
+                const targets = instances.filter(i => selectedIds.includes(i.id));
+                if (targets.length === 0) return;
+                const minX = Math.min(...targets.map(i => i.x));
+                const minY = Math.min(...targets.map(i => i.y));
+                setInstances(prev => prev.map(i => {
+                    if (selectedIds.includes(i.id)) {
+                        return { ...i, x: i.x - minX, y: i.y - minY };
+                    }
+                    return i;
+                }));
+            };
+
+            const asset = assets.find(a => a.id === item.assetId);
+
+            return (
+                <div className="h-full flex flex-col">
+                    <div className="sidebar-header">
+                        <span>配置プロパティ</span>
+                        <button onClick={alignToOrigin} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100">
+                            0,0へ移動
+                        </button>
+                    </div>
+
+                    <div className="p-3 overflow-y-auto flex-1">
+                        {/* Selected Item Info */}
+                        <div className="bg-blue-50 border border-blue-100 rounded p-3 mb-4">
+                            <div className="font-bold text-sm text-blue-800 mb-1">{item.type === 'text' ? 'テキスト' : asset?.name}</div>
+                            <div className="text-[10px] text-blue-400 font-mono">{item.id}</div>
+                        </div>
+
+                        {/* Actions */}
+                        {item.type !== 'text' && (
+                             <button 
+                                onClick={() => {
+                                    setDesignTargetId(item.assetId);
+                                    setMode('design');
+                                }} 
+                                className="btn-action bg-orange-500 text-white hover:bg-orange-600 mb-4 shadow-sm"
+                            >
+                                <Icon p={Icons.Pen} size={14}/> 形状を編集 (設計モード)
+                            </button>
+                        )}
+
+                        {/* Coordinates */}
+                        <div className="mb-4">
+                            <div className="text-xs font-bold text-gray-400 mb-2 border-b pb-1">座標・回転</div>
+                            <div className="prop-row">
+                                <label className="prop-label">X (mm)</label>
+                                <input type="number" value={toMM(item.x)} onChange={e => update('x', fromMM(Number(e.target.value)))} className="prop-input"/>
+                            </div>
+                            <div className="prop-row">
+                                <label className="prop-label">Y (mm)</label>
+                                <input type="number" value={toMM(item.y)} onChange={e => update('y', fromMM(Number(e.target.value)))} className="prop-input"/>
+                            </div>
+                            <div className="prop-row">
+                                <label className="prop-label">回転 (°)</label>
+                                <div className="flex-1 flex gap-2">
+                                    <input type="number" value={item.rotation} onChange={e => update('rotation', Number(e.target.value))} className="prop-input"/>
+                                    <button onClick={() => update('rotation', (item.rotation + 90) % 360)} className="px-2 border rounded bg-gray-50 hover:bg-gray-100 text-xs">↻</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Content (Text only) */}
+                        {item.type === 'text' && (
+                            <div className="mb-4">
+                                <div className="text-xs font-bold text-gray-400 mb-2 border-b pb-1">テキスト設定</div>
+                                <div className="mb-2">
+                                    <label className="prop-label block text-left mb-1">内容</label>
+                                    <textarea value={item.text} onChange={e => update('text', e.target.value)} className="w-full border rounded p-2 text-sm h-20"/>
+                                </div>
+                                <div className="prop-row">
+                                    <label className="prop-label">サイズ</label>
+                                    <input type="number" value={item.fontSize} onChange={e => update('fontSize', Number(e.target.value))} className="prop-input"/>
+                                </div>
+                                <div className="prop-row">
+                                    <label className="prop-label">色</label>
+                                    <input type="color" value={item.color} onChange={e => update('color', e.target.value)} className="h-8 w-full cursor-pointer"/>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Lock / Delete */}
+                        <div className="border-t pt-4 mt-2 space-y-2">
+                             <label className="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-gray-50 border">
+                                <input type="checkbox" checked={item.locked} onChange={e => update('locked', e.target.checked)} className="accent-blue-600"/>
+                                <span className="text-xs font-bold text-gray-600 flex items-center gap-1">
+                                    {item.locked ? <Icon p={Icons.Lock} size={12}/> : <Icon p={Icons.Unlock} size={12}/>} ロックする
+                                </span>
+                            </label>
+                            <button onClick={() => { setInstances(p => p.filter(i => i.id !== item.id)); setSelectedIds([]); }} className="btn-action bg-white border border-red-200 text-red-500 hover:bg-red-50">
+                                <Icon p={Icons.Trash} size={14}/> 削除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // 設計モード用プロパティ
+        const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, selectedShapeIndex, setSelectedShapeIndex, selectedPointIndex, setSelectedPointIndex }) => {
+            const asset = assets.find(a => a.id === designTargetId);
+            
+            // 未選択時
+            if (!asset) {
+                return (
+                    <div className="h-full flex flex-col text-gray-500 text-xs items-center justify-center p-4">
+                        <Icon p={Icons.Pen} size={48} className="text-orange-200 mb-2"/>
+                        <p>左のリストから編集する<br/>アセットを選択してください</p>
+                    </div>
+                );
+            }
+
+            const updateRoot = (k, v) => { if(asset.source==='global') return; setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, [k]: v } : a)); };
+            const updateShape = (k, v) => {
+                if(asset.source==='global' || selectedShapeIndex===null) return;
+                const currentShapes = asset.shapes || [];
+                const newShapes = currentShapes.map((s, i) => i === selectedShapeIndex ? { ...s, [k]: v } : s);
+                setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+            };
+            const updatePoint = (k, v) => {
+                if(asset.source==='global' || selectedShapeIndex===null || selectedPointIndex===null) return;
+                const newShapes = [...asset.shapes];
+                const newPts = [...newShapes[selectedShapeIndex].points];
+                const newPt = { ...newPts[selectedPointIndex], [k]: v };
+                newPts[selectedPointIndex] = newPt;
+                newShapes[selectedShapeIndex].points = newPts;
+                setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+            };
+
+            const fork = () => { const newA = { ...asset, id: `a-fork-${Date.now()}`, name: asset.name + ' (コピー)', source: undefined }; setLocalAssets(prev => [...prev, newA]); };
+            const publish = () => { if(!confirm('共通ライブラリに追加しますか？')) return; setGlobalAssets(prev => [...prev, { ...asset, id: `a-pub-${Date.now()}`, source: undefined }]); alert('追加しました'); };
+            
+            // 全体を(0,0)に寄せる
+            const normalizePosition = () => {
+                if (asset.source === 'global') return;
+                const shapes = asset.shapes || [];
+                if (shapes.length === 0) return;
+                let minX = Infinity, minY = Infinity;
+                shapes.forEach(s => {
+                    if (s.points) {
+                        s.points.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); });
+                    } else {
+                        minX = Math.min(minX, s.x || 0); minY = Math.min(minY, s.y || 0);
+                    }
+                });
+                if (minX === Infinity || (minX === 0 && minY === 0)) return;
+                const newShapes = shapes.map(s => {
+                    if (s.points) return { ...s, points: s.points.map(p => ({ ...p, x: p.x - minX, y: p.y - minY })) };
+                    return { ...s, x: (s.x || 0) - minX, y: (s.y || 0) - minY };
+                });
+                let maxX=0, maxY=0;
+                newShapes.forEach(s => {
+                    if (s.points) s.points.forEach(p=>{ maxX=Math.max(maxX,p.x); maxY=Math.max(maxY,p.y); });
+                    else { maxX=Math.max(maxX,(s.x||0)+s.w); maxY=Math.max(maxY,(s.y||0)+s.h); }
+                });
+                setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, w: maxX, h: maxY } : a));
+            };
+
+            if (asset.source === 'global') return (
+                <div className="p-4 bg-blue-50 h-full flex flex-col items-center justify-center text-center">
+                    <Icon p={Icons.Lock} size={32} className="text-blue-300 mb-2"/>
+                    <div className="text-sm font-bold text-blue-800 mb-1">{asset.name}</div>
+                    <div className="text-xs text-blue-600 mb-4">共通パーツは編集できません</div>
+                    <button onClick={fork} className="bg-blue-600 text-white text-xs px-4 py-2 rounded shadow hover:bg-blue-700 flex items-center gap-2"><Icon p={Icons.Copy} size={14}/> コピーして編集</button>
+                </div>
+            );
+
+            const selectedShape = (asset.shapes && selectedShapeIndex !== null) ? asset.shapes[selectedShapeIndex] : null;
+            const selectedPoint = (selectedShape && selectedShape.points && selectedPointIndex !== null) ? selectedShape.points[selectedPointIndex] : null;
+
+            return (
+                <div className="h-full flex flex-col">
+                    <div className="sidebar-header">
+                        <span>形状プロパティ</span>
+                        <button onClick={normalizePosition} className="text-[10px] bg-orange-50 text-orange-600 px-2 py-1 rounded border border-orange-200 hover:bg-orange-100">
+                            0,0に揃える
+                        </button>
+                    </div>
+
+                    <div className="p-3 overflow-y-auto flex-1 space-y-4">
+                        {/* Basic Info */}
+                        <div className="bg-orange-50 border border-orange-100 rounded p-2">
+                            <div className="prop-row">
+                                <label className="prop-label">名称</label>
+                                <input value={asset.name} onChange={e=>updateRoot('name',e.target.value)} className="prop-input font-bold text-left"/>
+                            </div>
+                            <div className="prop-row">
+                                <label className="prop-label">種類</label>
+                                <select value={asset.type} onChange={e=>updateRoot('type',e.target.value)} className="prop-input text-xs">
+                                    <option value="room">部屋・床</option>
+                                    <option value="fixture">設備・建具</option>
+                                    <option value="furniture">家具</option>
+                                </select>
+                            </div>
+                            <div className="prop-row">
+                                <label className="prop-label">全体色</label>
+                                <input type="color" value={asset.color} onChange={e=>updateRoot('color',e.target.value)} className="h-6 w-full cursor-pointer"/>
+                            </div>
+                        </div>
+
+                        {/* Shape / Point Editor */}
+                        {selectedPoint ? (
+                             <div className="bg-white p-2 rounded border-2 border-red-300">
+                                <div className="text-xs font-bold text-red-600 mb-2">選択頂点 (mm)</div>
+                                <div className="prop-row">
+                                    <label className="prop-label">X</label>
+                                    <input type="number" value={toMM(selectedPoint.x)} onChange={e=>updatePoint('x',fromMM(Number(e.target.value)))} className="prop-input"/>
+                                </div>
+                                <div className="prop-row">
+                                    <label className="prop-label">Y</label>
+                                    <input type="number" value={toMM(selectedPoint.y)} onChange={e=>updatePoint('y',fromMM(Number(e.target.value)))} className="prop-input"/>
+                                </div>
+                            </div>
+                        ) : selectedShape ? (
+                            <div className="bg-white p-2 rounded border-2 border-blue-300">
+                                <div className="text-xs font-bold text-blue-600 mb-2">選択パーツ (mm)</div>
+                                {selectedShape.type !== 'polygon' && (
+                                    <>
+                                        <div className="prop-row"><label className="prop-label">幅</label><input type="number" value={toMM(selectedShape.w)} onChange={e=>updateShape('w',fromMM(Number(e.target.value)))} className="prop-input"/></div>
+                                        <div className="prop-row"><label className="prop-label">奥</label><input type="number" value={toMM(selectedShape.h)} onChange={e=>updateShape('h',fromMM(Number(e.target.value)))} className="prop-input"/></div>
+                                    </>
+                                )}
+                                <div className="prop-row"><label className="prop-label">X</label><input type="number" value={toMM(selectedShape.x||0)} onChange={e=>updateShape('x',fromMM(Number(e.target.value)))} className="prop-input"/></div>
+                                <div className="prop-row"><label className="prop-label">Y</label><input type="number" value={toMM(selectedShape.y||0)} onChange={e=>updateShape('y',fromMM(Number(e.target.value)))} className="prop-input"/></div>
+                                <div className="prop-row"><label className="prop-label">色</label><input type="color" value={selectedShape.color || asset.color} onChange={e=>updateShape('color',e.target.value)} className="h-6 w-full"/></div>
+                            
+                                {selectedShape.type === 'polygon' && selectedShape.points && (
+                                    <div className="mt-3 border-t pt-2">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-[10px] font-bold text-purple-600">頂点編集</span>
+                                            <button onClick={() => {
+                                                const newPts = [...selectedShape.points, { x: 0, y: 0, h1:{x:0,y:0}, h2:{x:0,y:0}, isCurve: false }];
+                                                const newShapes = [...asset.shapes];
+                                                newShapes[selectedShapeIndex].points = newPts;
+                                                setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                                            }} className="text-[10px] bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200">+ 追加</button>
+                                        </div>
+                                        <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-thin">
+                                            {selectedShape.points.map((pt, idx) => (
+                                                <div key={idx} onClick={() => setSelectedPointIndex(idx)} className={`flex items-center text-xs p-1 rounded border cursor-pointer hover:bg-gray-50 ${selectedPointIndex===idx?'bg-purple-50 border-purple-300':''}`}>
+                                                    <span className="w-4 font-bold text-purple-400">{idx}</span>
+                                                    <span className="flex-1 text-right text-gray-500">{toMM(pt.x)}, {toMM(pt.y)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-xs text-gray-400 p-2 text-center border rounded border-dashed">キャンバス上のパーツをクリックして編集</div>
+                        )}
+
+                        {/* Structure List */}
+                        <div className="mt-4 border-t pt-2">
+                            <div className="flex justify-between items-center mb-2">
+                                <label className="text-xs font-bold text-gray-500">構成要素</label>
+                                <div className="flex gap-1">
+                                    <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: [...(a.shapes||[]), { type: 'rect', w: 40, h: 40, x: 0, y: 0, color: asset.color }] } : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">□</button>
+                                    <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: [...(a.shapes||[]), { type: 'circle', w: 40, h: 40, x: 0, y: 0, color: asset.color }] } : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">○</button>
+                                    <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: [...(a.shapes||[]), { type: 'polygon', points: createRectPath(40, 40, 0, 0), color: asset.color }] } : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">▽</button>
+                                </div>
+                            </div>
+                            <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-thin">
+                                {(asset.shapes || []).map((s, i) => (
+                                    <div key={i} onClick={() => { setSelectedShapeIndex(i); setSelectedPointIndex(null); }} className={`flex justify-between items-center text-xs p-1 rounded border cursor-pointer ${selectedShapeIndex === i ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}>
+                                        <span className="font-bold text-gray-500">#{i+1} {s.type}</span>
+                                        <button onClick={(e) => { e.stopPropagation(); if(!confirm('削除？')) return; const newShapes = asset.shapes.filter((_, idx) => idx !== i); setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a)); setSelectedShapeIndex(null); }} className="text-red-400 hover:text-red-600 px-1">×</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="pt-4 border-t">
+                             <button onClick={publish} className="btn-action bg-white border border-blue-200 text-blue-600 hover:bg-blue-50">
+                                <Icon p={Icons.Globe} size={14}/> 共通ライブラリに登録
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const Ruler = ({ viewState }) => {
+            const width = 3000;
+            const height = 3000; const step = 100;
+            const offsetX = viewState.x; const offsetY = viewState.y;
+            const scale = viewState.scale * BASE_SCALE;
+            const xTicks = []; const yTicks = [];
+            for (let i = 0; i < width; i += step) {
+                const x = offsetX + i * scale;
+                if (x > 20) xTicks.push(<g key={`x${i}`}><line x1={x} y1={0} x2={x} y2={15} stroke="#888" strokeWidth="1"/><text x={x+2} y={12} fontSize="10" fill="#555">{i}</text></g>);
+            }
+            for (let i = 0; i < height; i += step) {
+                const y = offsetY + i * scale;
+                if (y > 20) yTicks.push(<g key={`y${i}`}><line x1={0} y1={y} x2={15} y2={y} stroke="#888" strokeWidth="1"/><text x={2} y={y+10} fontSize="10" fill="#555">{i}</text></g>);
+            }
+            return (
+                <div className="absolute inset-0 pointer-events-none z-0">
+                    <svg width="100%" height="20" className="absolute top-0 left-0 bg-white/90 border-b z-10">{xTicks}</svg>
+                    <svg width="20" height="100%" className="absolute top-0 left-0 bg-white/90 border-r z-10">{yTicks}</svg>
+                </div>
+            );
+        };
+
+        const LayoutCanvas = ({ viewState, setViewState, assets, instances, setInstances, selectedIds, setSelectedIds }) => {
+            const dragRef = useRef({ isDragging: false, mode: null });
+            const svgRef = useRef(null);
+
+            const handleDown = (e, id) => {
+                if (svgRef.current && e.pointerId) svgRef.current.setPointerCapture(e.pointerId);
+                const isPan = e.button === 1 || id === null;
+                
+                let targetIds = [];
+                if (id) {
+                    if (selectedIds.includes(id)) {
+                        targetIds = [...selectedIds];
+                    } else {
+                        targetIds = [id];
+                        setSelectedIds([id]);
+                    }
+                }
+
+                dragRef.current = { 
+                    isDragging: false, mode: null,
+                    sx: e.clientX, sy: e.clientY,
+                    vx: viewState.x, vy: viewState.y,
+                    items: instances.map(i => ({...i})),
+                    targetIds: targetIds
+                };
+                if (isPan) {
+                    dragRef.current.isDragging = true;
+                    dragRef.current.mode = 'panning';
+                } else if (id) {
+                    e.stopPropagation();
+                    const hasUnlocked = targetIds.some(tid => {
+                        const t = instances.find(i => i.id === tid);
+                        return t && !t.locked;
+                    });
+                    if (hasUnlocked) {
+                        dragRef.current.isDragging = true;
+                        dragRef.current.mode = 'dragging';
+                    }
+                }
+            };
+            const handleMove = (e) => {
+                if (!dragRef.current.isDragging) return;
+                e.preventDefault();
+                const dx = e.clientX - dragRef.current.sx;
+                const dy = e.clientY - dragRef.current.sy;
+                if (dragRef.current.mode === 'panning') {
+                    setViewState(p => ({ ...p, x: dragRef.current.vx + dx, y: dragRef.current.vy + dy }));
+                } else if (dragRef.current.mode === 'dragging') {
+                    const wDx = dx / viewState.scale / BASE_SCALE;
+                    const wDy = dy / viewState.scale / BASE_SCALE;
+                    
+                    setInstances(prev => prev.map(inst => {
+                        if (dragRef.current.targetIds.includes(inst.id) && !inst.locked) {
+                            const org = dragRef.current.items.find(i => i.id === inst.id);
+                            if (!org) return inst;
+                            const asset = assets.find(a => a.id === inst.assetId);
+                            let nx = org.x + wDx;
+                            let ny = org.y + wDy;
+                            if (inst.type !== 'text' && asset?.snap && inst.rotation % 90 === 0) {
+                                nx = Math.round(nx / SNAP_UNIT) * SNAP_UNIT;
+                                ny = Math.round(ny / SNAP_UNIT) * SNAP_UNIT;
+                            }
+                            return { ...inst, x: nx, y: ny };
+                        }
+                        return inst;
+                    }));
+                }
+            };
+            const handleUp = () => { dragRef.current = { isDragging: false, mode: null }; };
+
+            const sortedItems = useMemo(() => {
+                return instances.map(inst => {
+                    if (inst.type === 'text') return { ...inst, z: 99 };
+                    const asset = assets.find(a => a.id === inst.assetId);
+                    return asset ? { ...inst, ...asset, z: LAYERS[asset.type] } : null;
+                }).filter(Boolean).sort((a, b) => a.z - b.z);
+            }, [instances, assets]);
+            
+            return (
+                <div className="w-full h-full absolute top-0 left-0 z-20" onPointerDown={e => onDown(e, null)} onPointerMove={handleMove} onPointerUp={handleUp} ref={svgRef}>
+                    <svg width="100%" height="100%">
+                        <g transform={`translate(${viewState.x}, ${viewState.y}) scale(${viewState.scale})`}>
+                            <line x1="-5000" y1="0" x2="5000" y2="0" stroke="#ddd" strokeWidth="2"/>
+                            <line x1="0" y1="-5000" x2="0" y2="5000" stroke="#ddd" strokeWidth="2"/>
+                            {sortedItems.map(item => <RenderItem key={item.id} item={item} isSelected={selectedIds.includes(item.id)} onDown={handleDown} />)}
+                        </g>
+                    </svg>
+                </div>
+            );
+        };
+
+        const RenderItem = ({ item, isSelected, onDown }) => (
+            <g transform={`translate(${item.x * BASE_SCALE}, ${item.y * BASE_SCALE}) rotate(${item.rotation})`} onPointerDown={e => onDown(e, item.id)} className="hover:opacity-90" style={{ cursor: 'grab' }}>
+                {item.type === 'text' ? (
+                    <g>
+                        {isSelected && <rect x="-5" y="-25" width="100" height="35" fill="none" stroke="#3b82f6" strokeWidth="2" strokeDasharray="4"/>}
+                        <text fill={item.color} fontSize={item.fontSize} fontWeight="bold" style={{whiteSpace:'pre', userSelect:'none'}}>{item.text}</text>
+                    </g>
+                ) : (
+                    <g>
+                        <RenderAssetShapes item={item} isSelected={isSelected} />
+                        {isSelected && <g className="pointer-events-none">
+                            <line x1={0} y1={-10} x2={item.w*BASE_SCALE} y2={-10} stroke="blue" strokeWidth="1"/><text x={item.w*BASE_SCALE/2} y={-12} textAnchor="middle" fontSize="10" fill="blue">{toMM(item.w)}mm</text>
+                            <line x1={-10} y1={0} x2={-10} y2={item.h*BASE_SCALE} stroke="blue" strokeWidth="1"/><text x={-12} y={item.h*BASE_SCALE/2} textAnchor="end" dominantBaseline="middle" fontSize="10" fill="blue">{toMM(item.h)}mm</text>
+                        </g>}
+                        <text x={item.w*BASE_SCALE/2} y={item.h*BASE_SCALE/2} textAnchor="middle" dominantBaseline="middle" fontSize={12} fill="#333" pointerEvents="none" style={{userSelect:'none', textShadow: '0 0 2px white'}}>{item.name}</text>
+                    </g>
+                )}
+            </g>
+        );
+        const RenderAssetShapes = ({ item, isSelected }) => {
+            const shapes = (item.shapes && item.shapes.length > 0) 
+                ? item.shapes 
+                : [{ type: item.shape || 'rect', w: item.w, h: item.h, x: 0, y: 0, color: item.color, points: item.points || createRectPath(item.w, item.h) }];
+            return (
+                <g>
+                    {shapes.map((s, i) => {
+                        const style = { fill: s.color || item.color, stroke: isSelected ? "#3b82f6" : "#999", strokeWidth: isSelected ? 3 : 1 };
+                        if (s.type === 'circle') return <ellipse key={i} cx={(s.x + s.w/2)*BASE_SCALE} cy={(s.y + s.h/2)*BASE_SCALE} rx={s.w*BASE_SCALE/2} ry={s.h*BASE_SCALE/2} {...style} />;
+                        if (s.type === 'polygon' && s.points) return <polygon key={i} points={s.points.map(p=>`${p.x*BASE_SCALE},${p.y*BASE_SCALE}`).join(' ')} {...style} />;
+                        return <rect key={i} x={s.x*BASE_SCALE} y={s.y*BASE_SCALE} width={s.w*BASE_SCALE} height={s.h*BASE_SCALE} rx={2} {...style} />;
+                    })}
+                </g>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
