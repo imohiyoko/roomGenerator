@@ -96,6 +96,17 @@ func main() {
 		logInfo("dataディレクトリを作成しました")
 	}
 
+	// global_assets.json が存在しない場合は自動生成
+	globalAssetsPath := filepath.Join(dataDir, "global_assets.json")
+	if _, err := os.Stat(globalAssetsPath); os.IsNotExist(err) {
+		defaultAssets := getDefaultGlobalAssets()
+		if err := saveFile(globalAssetsPath, defaultAssets); err != nil {
+			logError("global_assets.json 初期化失敗: %v", err)
+		} else {
+			logInfo("global_assets.json を初期化しました")
+		}
+	}
+
 	mux := http.NewServeMux()
 
 	publicFS, err := fs.Sub(staticFiles, "public")
@@ -103,11 +114,32 @@ func main() {
 		logError("publicファイルシステム読み込み失敗: %v", err)
 		panic(err)
 	}
-	mux.Handle("/", http.FileServer(http.FS(publicFS)))
+
+	// SPA ルーティング: /library へのアクセスも index.html を返す
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// APIリクエストはスキップ
+		if len(r.URL.Path) >= 4 && r.URL.Path[:4] == "/api" {
+			http.NotFound(w, r)
+			return
+		}
+		// /library パスは index.html を返す
+		if r.URL.Path == "/library" || r.URL.Path == "/library/" {
+			data, _ := fs.ReadFile(publicFS, "index.html")
+			w.Header().Set("Content-Type", "text/html")
+			w.Write(data)
+			return
+		}
+		// その他は通常の静的ファイルサーバー
+		http.FileServer(http.FS(publicFS)).ServeHTTP(w, r)
+	})
 
 	mux.HandleFunc("/api/assets", func(w http.ResponseWriter, r *http.Request) {
 		logInfo("[%s] /api/assets", r.Method)
 		handleAssets(w, r, dataDir)
+	})
+	mux.HandleFunc("/api/palette", func(w http.ResponseWriter, r *http.Request) {
+		logInfo("[%s] /api/palette", r.Method)
+		handlePalette(w, r, dataDir)
 	})
 	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
 		logInfo("[%s] /api/projects", r.Method)
@@ -159,6 +191,40 @@ func handleAssets(w http.ResponseWriter, r *http.Request, dataDir string) {
 		}
 		mu.Unlock()
 		logInfo("グローバルアセットを保存しました")
+		respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
+}
+
+func handlePalette(w http.ResponseWriter, r *http.Request, dataDir string) {
+	filePath := filepath.Join(dataDir, "palette.json")
+	defaultColors := []string{
+		"#f43f5e", "#fb923c", "#facc15", "#4ade80", "#22d3d8",
+		"#3b82f6", "#8b5cf6", "#ec4899", "#78716c", "#1e293b",
+		"#ffffff", "#fdfcdc", "#fffbf0", "#f0e68c", "#e6e6fa",
+		"#b0e0e6", "#d3d3d3", "#cccccc", "#8b4513", "#87ceeb",
+	}
+
+	if r.Method == http.MethodGet {
+		data, err := loadJSON(filePath)
+		if err != nil {
+			logInfo("palette.json が見つかりません。デフォルトカラーを返します")
+			respondJSON(w, http.StatusOK, map[string]interface{}{"colors": defaultColors})
+			return
+		}
+		var palette interface{}
+		json.Unmarshal(data, &palette)
+		respondJSON(w, http.StatusOK, palette)
+	} else if r.Method == http.MethodPost {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		if err := os.WriteFile(filePath, body, 0644); err != nil {
+			mu.Unlock()
+			logError("パレット保存失敗: %v", err)
+			respondError(w, http.StatusInternalServerError, 500, "パレット保存に失敗しました")
+			return
+		}
+		mu.Unlock()
+		logInfo("カラーパレットを保存しました")
 		respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
