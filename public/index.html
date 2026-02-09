@@ -516,7 +516,7 @@
 
         // --- Canvas Components ---
 
-        const DesignCanvasRender = ({ viewState, asset, shapes, selectedShapeIndex, selectedPointIndex, onDown, onMove, onUp, onDeleteShape, svgRef }) => (
+        const DesignCanvasRender = ({ viewState, asset, shapes, selectedShapeIndices, selectedPointIndex, onDown, onMove, onUp, onDeleteShape, svgRef, marquee }) => (
             <div className="w-full h-full absolute top-0 left-0 overflow-auto canvas-scroll pt-5 pl-5"
                 onPointerDown={e => onDown(e, null)}
                 onPointerMove={onMove}
@@ -532,7 +532,7 @@
                             <g>
                                 <rect x="0" y="0" width={asset.w * BASE_SCALE} height={asset.h * BASE_SCALE} fill="none" stroke="blue" strokeWidth="1" strokeDasharray="4 2" opacity="0.3" pointerEvents="none" />
                                 {shapes.map((s, i) => {
-                                    const isSelected = (selectedShapeIndex === i);
+                                    const isSelected = selectedShapeIndices.includes(i);
                                     const style = { fill: s.color || asset.color, stroke: isSelected ? "#3b82f6" : "#999", strokeWidth: isSelected ? 2 : 1, cursor: 'move' };
                                     const rot = s.rotation || 0;
                                     const rotateTransform = rot && s.type === 'ellipse' ? `rotate(${rot} ${(s.cx || 0) * BASE_SCALE} ${(s.cy || 0) * BASE_SCALE})` : '';
@@ -544,7 +544,7 @@
                                                     ? <path d={generateEllipsePath(s)} transform={rotateTransform} {...style} />
                                                     : <path d={generateSvgPath(s.points)} {...style} />
                                             }
-                                            {/* 楕円の編集ハンドル */}
+                                            {/* 編集ハンドル (個別表示) */}
                                             {isSelected && s.type === 'ellipse' && (() => {
                                                 const cx = (s.cx || 0) * BASE_SCALE;
                                                 const cy = (s.cy || 0) * BASE_SCALE;
@@ -598,7 +598,7 @@
                                                 const maxX = Math.max(...s.points.map(p => p.x));
                                                 const minY = Math.min(...s.points.map(p => p.y));
                                                 return (
-                                                    <g transform={`translate(${maxX * BASE_SCALE + 10}, ${minY * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(e, i)}>
+                                                    <g transform={`translate(${maxX * BASE_SCALE + 10}, ${minY * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(i)}>
                                                         <circle r="8" fill="red" />
                                                         <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
                                                     </g>
@@ -609,12 +609,80 @@
                                                     <rect x={(s.x + s.w - 5 / BASE_SCALE) * BASE_SCALE} y={(s.y + s.h - 5 / BASE_SCALE) * BASE_SCALE} width="10" height="10" fill="yellow" stroke="blue" strokeWidth="2" className="cursor-nwse-resize" onPointerDown={(e) => onDown(e, i, null, 'both')} />
                                                     <rect x={(s.x + s.w - 5 / BASE_SCALE) * BASE_SCALE} y={(s.y + s.h / 2 - 5 / BASE_SCALE) * BASE_SCALE} width="10" height="10" fill="lightblue" stroke="blue" strokeWidth="2" className="cursor-ew-resize" onPointerDown={(e) => onDown(e, i, null, 'horizontal')} />
                                                     <rect x={(s.x + s.w / 2 - 5 / BASE_SCALE) * BASE_SCALE} y={(s.y + s.h - 5 / BASE_SCALE) * BASE_SCALE} width="10" height="10" fill="lightgreen" stroke="blue" strokeWidth="2" className="cursor-ns-resize" onPointerDown={(e) => onDown(e, i, null, 'vertical')} />
-                                                    <g transform={`translate(${(s.x + s.w) * BASE_SCALE + 10}, ${s.y * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(e, i)}>
+                                                    <g transform={`translate(${(s.x + s.w) * BASE_SCALE + 10}, ${s.y * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(i)}>
                                                         <circle r="8" fill="red" />
                                                         <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
                                                     </g>
                                                 </g>
                                             )}
+                                            {/* 寸法表示 (選択時のみ) */}
+                                            {isSelected && (() => {
+                                                const fontSize = 12;
+                                                const textFill = "blue";
+                                                const strokeColor = "blue";
+                                                const strokeWidth = 1;
+                                                const offset = 15;
+
+                                                if (s.type === 'circle' && (s.w || s.h)) {
+                                                    // Radius
+                                                    const cx = (s.x + s.w / 2) * BASE_SCALE;
+                                                    const cy = (s.y + s.h / 2) * BASE_SCALE;
+                                                    const r = (s.w / 2); // 単位なし
+                                                    return (
+                                                        <g pointerEvents="none">
+                                                            <line x1={cx} y1={cy} x2={cx + s.w * BASE_SCALE / 2} y2={cy} stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray="2,2" />
+                                                            <text x={cx + s.w * BASE_SCALE / 4} y={cy - 5} fill={textFill} fontSize={fontSize} textAnchor="middle">r: {Math.round(r)}</text>
+                                                        </g>
+                                                    );
+                                                } else if (s.type === 'ellipse' && (s.rx || s.ry)) {
+                                                    // Radii
+                                                    const cx = (s.cx || 0) * BASE_SCALE;
+                                                    const cy = (s.cy || 0) * BASE_SCALE;
+                                                    const rx = s.rx || 50;
+                                                    const ry = s.ry || 50;
+                                                    return (
+                                                        <g pointerEvents="none" transform={rotateTransform}>
+                                                            {/* Rx */}
+                                                            <line x1={cx} y1={cy} x2={cx + rx * BASE_SCALE} y2={cy} stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray="2,2" />
+                                                            <text x={cx + rx * BASE_SCALE / 2} y={cy - 5} fill={textFill} fontSize={fontSize} textAnchor="middle">rx: {Math.round(rx)}</text>
+                                                            {/* Ry */}
+                                                            <line x1={cx} y1={cy} x2={cx} y2={cy + ry * BASE_SCALE} stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray="2,2" />
+                                                            <text x={cx + 5} y={cy + ry * BASE_SCALE / 2} fill={textFill} fontSize={fontSize} textAnchor="start" dominantBaseline="middle">ry: {Math.round(ry)}</text>
+                                                        </g>
+                                                    );
+                                                } else if (s.type === 'polygon' && s.points) {
+                                                    // Segment lengths
+                                                    return (
+                                                        <g pointerEvents="none">
+                                                            {s.points.map((p, idx) => {
+                                                                const nextP = s.points[(idx + 1) % s.points.length];
+                                                                const mx = ((p.x + nextP.x) / 2) * BASE_SCALE;
+                                                                const my = ((p.y + nextP.y) / 2) * BASE_SCALE;
+                                                                const dist = Math.sqrt(Math.pow(nextP.x - p.x, 2) + Math.pow(nextP.y - p.y, 2));
+                                                                return (
+                                                                    <text key={idx} x={mx} y={my} fill={textFill} fontSize={fontSize} textAnchor="middle" dominantBaseline="middle" stroke="white" strokeWidth="3" paintOrder="stroke">{Math.round(dist)}</text>
+                                                                );
+                                                            })}
+                                                        </g>
+                                                    );
+                                                } else {
+                                                    // Rect / Image (Width / Height)
+                                                    const x = (s.x || 0) * BASE_SCALE;
+                                                    const y = (s.y || 0) * BASE_SCALE;
+                                                    const w = (s.w || 0);
+                                                    const h = (s.h || 0);
+                                                    return (
+                                                        <g pointerEvents="none">
+                                                            {/* Width (Top) */}
+                                                            <line x1={x} y1={y - offset} x2={x + w * BASE_SCALE} y2={y - offset} stroke={strokeColor} strokeWidth={strokeWidth} markerEnd="url(#arrow)" markerStart="url(#arrow)" />
+                                                            <text x={x + w * BASE_SCALE / 2} y={y - offset - 5} fill={textFill} fontSize={fontSize} textAnchor="middle">{Math.round(w)}</text>
+                                                            {/* Height (Left) */}
+                                                            <line x1={x - offset} y1={y} x2={x - offset} y2={y + h * BASE_SCALE} stroke={strokeColor} strokeWidth={strokeWidth} markerEnd="url(#arrow)" markerStart="url(#arrow)" />
+                                                            <text x={x - offset - 5} y={y + h * BASE_SCALE / 2} fill={textFill} fontSize={fontSize} textAnchor="end" dominantBaseline="middle">{Math.round(h)}</text>
+                                                        </g>
+                                                    );
+                                                }
+                                            })()}
                                         </g>
                                     );
                                 })}
@@ -622,30 +690,61 @@
                         )}
                     </g>
                 </svg>
+                {/* マーキー選択矩形 */}
+                {marquee && (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            left: Math.min(marquee.sx, marquee.ex),
+                            top: Math.min(marquee.sy, marquee.ey),
+                            width: Math.abs(marquee.ex - marquee.sx),
+                            height: Math.abs(marquee.ey - marquee.sy),
+                            border: '2px dashed #3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            pointerEvents: 'none',
+                            zIndex: 9999
+                        }}
+                    />
+                )}
             </div>
         );
 
-        const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, setLocalAssets, selectedShapeIndex, setSelectedShapeIndex, selectedPointIndex, setSelectedPointIndex }) => {
+        const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, setLocalAssets, selectedShapeIndices, setSelectedShapeIndices, selectedPointIndex, setSelectedPointIndex }) => {
             const dragRef = useRef({ mode: 'idle' });
             const [cursorMode, setCursorMode] = useState('idle');
             const svgRef = useRef(null);
+            const [marquee, setMarquee] = useState(null); // マーキー選択用
             const asset = assets.find(a => a.id === designTargetId);
 
             const handleDown = (e, shapeIndex = null, pointIndex = null, resizeMode = null, handleIndex = null) => {
                 if (svgRef.current && e.pointerId) svgRef.current.setPointerCapture(e.pointerId);
                 const rect = svgRef.current.getBoundingClientRect();
 
-                // キャンバス全体の移動（背景クリックまたは中ボタン）
-                if (shapeIndex === null || e.button === 1) {
+                // キャンバス全体の移動（中ボタンのみ - 背景パンはWASD/矢印キーで）
+                if (e.button === 1) {
                     dragRef.current = { mode: 'panning', sx: e.clientX, sy: e.clientY, vx: viewState.x, vy: viewState.y };
                     setCursorMode('panning');
+                    return;
+                }
+
+                // 背景左クリック時はマーキー選択開始
+                if (shapeIndex === null && e.button === 0) {
+                    setMarquee({ sx: e.clientX, sy: e.clientY, ex: e.clientX, ey: e.clientY });
+                    if (!e.ctrlKey && !e.metaKey) {
+                        setSelectedShapeIndices([]); // Ctrlなしなら選択解除
+                    }
+                    dragRef.current = {
+                        mode: 'marquee',
+                        sx: e.clientX, sy: e.clientY,
+                        prevSelectedIndices: e.ctrlKey || e.metaKey ? [...selectedShapeIndices] : []
+                    };
                     return;
                 }
 
                 // リサイズハンドルドラッグ
                 if (resizeMode && shapeIndex !== null) {
                     e.stopPropagation();
-                    setSelectedShapeIndex(shapeIndex);
+                    setSelectedShapeIndices([shapeIndex]);
                     setSelectedPointIndex(null);
                     const shape = asset.shapes[shapeIndex];
                     dragRef.current = {
@@ -662,7 +761,7 @@
                 // 制御点（ハンドル）ドラッグ
                 if (handleIndex !== null && pointIndex !== null && shapeIndex !== null) {
                     e.stopPropagation();
-                    setSelectedShapeIndex(shapeIndex);
+                    setSelectedShapeIndices([shapeIndex]);
                     setSelectedPointIndex(pointIndex);
                     const shape = asset.shapes[shapeIndex];
                     const handle = shape.points[pointIndex].handles[handleIndex];
@@ -674,16 +773,14 @@
                 // 角度ハンドルドラッグ（円弧用）
                 if ((pointIndex === 'startAngle' || pointIndex === 'endAngle') && shapeIndex !== null) {
                     e.stopPropagation();
-                    setSelectedShapeIndex(shapeIndex);
+                    setSelectedShapeIndices([shapeIndex]);
                     const shape = asset.shapes[shapeIndex];
                     const rect = svgRef.current.getBoundingClientRect();
                     dragRef.current = {
                         mode: 'draggingAngle',
-                        angleType: pointIndex,
-                        shapeCX: (shape.cx || 0),
-                        shapeCY: (shape.cy || 0),
-                        shapeRotation: shape.rotation || 0,
-                        rect: rect
+                        targetProp: pointIndex,
+                        cx: (shape.cx || 0) * viewState.scale * BASE_SCALE + viewState.x + rect.left,
+                        cy: (shape.cy || 0) * viewState.scale * BASE_SCALE + viewState.y + rect.top
                     };
                     setCursorMode('draggingAngle');
                     return;
@@ -692,70 +789,115 @@
                 // 回転ハンドルドラッグ
                 if (pointIndex === 'rotation' && shapeIndex !== null) {
                     e.stopPropagation();
-                    setSelectedShapeIndex(shapeIndex);
+                    setSelectedShapeIndices([shapeIndex]);
                     const shape = asset.shapes[shapeIndex];
                     const rect = svgRef.current.getBoundingClientRect();
+                    // シェイプ中心（または回転中心）を計算
+                    let cx = (shape.x || 0) + (shape.w || 0) / 2;
+                    let cy = (shape.y || 0) + (shape.h || 0) / 2;
+                    if (shape.type === 'ellipse' || shape.type === 'arc') {
+                        cx = shape.cx || 0;
+                        cy = shape.cy || 0;
+                    } else if (shape.type === 'polygon') {
+                        // ポリゴンの中心計算は簡易的にバウンディングボックス中心
+                        // (本来は重心などが良いが、既存実装に合わせるならそのまま)
+                    }
+
                     dragRef.current = {
                         mode: 'draggingRotation',
-                        shapeCX: (shape.cx || 0),
-                        shapeCY: (shape.cy || 0),
+                        cx: cx * viewState.scale * BASE_SCALE + viewState.x + rect.left,
+                        cy: cy * viewState.scale * BASE_SCALE + viewState.y + rect.top,
                         initialRotation: shape.rotation || 0,
-                        rect: rect
+                        startAngle: 0 // moveで計算
                     };
+                    // moveでの計算用にstartAngleが必要だが、ここでは一旦マウス位置との角度を保持
+                    const mx = e.clientX;
+                    const my = e.clientY;
+                    dragRef.current.startAngle = Math.atan2(my - dragRef.current.cy, mx - dragRef.current.cx) * 180 / Math.PI;
+
                     setCursorMode('draggingRotation');
                     return;
                 }
 
-                // 半径ハンドルドラッグ（rx/ry/rxy）
-                if ((pointIndex === 'rx' || pointIndex === 'ry' || pointIndex === 'rxy') && shapeIndex !== null) {
+                // 半径ハンドルドラッグ（円・円弧）
+                if ((pointIndex === 'rx' || pointIndex === 'ry') && shapeIndex !== null) {
                     e.stopPropagation();
-                    setSelectedShapeIndex(shapeIndex);
+                    setSelectedShapeIndices([shapeIndex]);
                     const shape = asset.shapes[shapeIndex];
-                    const rect = svgRef.current.getBoundingClientRect();
                     dragRef.current = {
                         mode: 'draggingRadius',
-                        radiusType: pointIndex,
-                        shapeCX: (shape.cx || 0),
-                        shapeCY: (shape.cy || 0),
-                        initialRx: shape.rx || 50,
-                        initialRy: shape.ry || 50,
-                        rect: rect
+                        targetProp: pointIndex,
+                        sx: e.clientX, sy: e.clientY,
+                        initialVal: shape[pointIndex] || 50
                     };
-                    setCursorMode('draggingRadius');
+                    setCursorMode('ew-resize'); // 簡易
                     return;
                 }
 
                 // 頂点ドラッグ
                 if (pointIndex !== null && shapeIndex !== null) {
                     e.stopPropagation();
-                    setSelectedShapeIndex(shapeIndex);
+                    setSelectedShapeIndices([shapeIndex]);
                     setSelectedPointIndex(pointIndex);
-                    const shape = asset.shapes ? asset.shapes[shapeIndex] : { points: [] };
-                    const point = shape.points[pointIndex];
-                    dragRef.current = { mode: 'draggingPoint', sx: e.clientX, sy: e.clientY, pointX: point.x, pointY: point.y };
+                    const shape = asset.shapes[shapeIndex];
+                    const pt = shape.points[pointIndex];
+                    dragRef.current = { mode: 'draggingPoint', sx: e.clientX, sy: e.clientY, pointX: pt.x, pointY: pt.y };
                     setCursorMode('draggingPoint');
                     return;
                 }
 
-                // シェイプドラッグ
+                // シェイプドラッグ（移動）
                 if (shapeIndex !== null) {
                     e.stopPropagation();
-                    setSelectedShapeIndex(shapeIndex);
-                    setSelectedPointIndex(null);
-                    const shape = (asset.shapes && asset.shapes[shapeIndex]) || { x: 0, y: 0, w: 60, h: 60 };
+
+                    let newSelectedIndices = [...selectedShapeIndices];
+                    if (e.ctrlKey || e.metaKey) {
+                        // トグル選択
+                        if (newSelectedIndices.includes(shapeIndex)) {
+                            newSelectedIndices = newSelectedIndices.filter(i => i !== shapeIndex);
+                        } else {
+                            newSelectedIndices.push(shapeIndex);
+                        }
+                        setSelectedShapeIndices(newSelectedIndices);
+                        // ドラッグはしない（トグルのみ）か、ドラッグも許可するか？
+                        // 一般的にはトグル時はドラッグしないことが多いが、PowerPoint等はドラッグ可能。
+                        // ここではドラッグ可能にする。ただしトグルで非選択になった場合はドラッグ対象から外れるため注意。
+                    } else {
+                        // 単一選択または既存選択の維持
+                        if (!newSelectedIndices.includes(shapeIndex)) {
+                            newSelectedIndices = [shapeIndex];
+                            setSelectedShapeIndices(newSelectedIndices);
+                        }
+                        // 既に選択済みの場合は選択維持（グループ移動のため）
+                    }
+
+                    // 選択されているシェイプがなければ終了（トグルで全部消えた場合など）
+                    if (newSelectedIndices.length === 0) return;
+
+                    // 選択中の全シェイプの初期位置を保存
+                    const initialShapes = newSelectedIndices.map(i => ({
+                        index: i,
+                        // deep copy
+                        data: JSON.parse(JSON.stringify(asset.shapes[i]))
+                    }));
+
+                    const anchorIndex = newSelectedIndices[0];
+                    const anchorShape = asset.shapes[anchorIndex];
+                    const anchorX = anchorShape.x !== undefined ? anchorShape.x : (anchorShape.cx !== undefined ? anchorShape.cx : 0);
+                    const anchorY = anchorShape.y !== undefined ? anchorShape.y : (anchorShape.cy !== undefined ? anchorShape.cy : 0);
+
                     dragRef.current = {
                         mode: 'draggingShape',
                         sx: e.clientX, sy: e.clientY,
-                        shapeX: shape.x || 0, shapeY: shape.y || 0,
-                        shapeCX: shape.cx || 0, shapeCY: shape.cy || 0,
-                        initialPoints: shape.points ? JSON.parse(JSON.stringify(shape.points)) : null
+                        initialShapes: initialShapes,
+                        anchorX, anchorY
                     };
                     setCursorMode('draggingShape');
                     return;
                 }
 
-                // 選択解除
-                setSelectedShapeIndex(null);
+                // 選択解除 (ここには到達しないはずだが念のため)
+                setSelectedShapeIndices([]);
                 setSelectedPointIndex(null);
             };
 
@@ -768,141 +910,243 @@
                     const dx = e.clientX - dragRef.current.sx;
                     const dy = e.clientY - dragRef.current.sy;
                     setViewState(p => ({ ...p, x: dragRef.current.vx + dx, y: dragRef.current.vy + dy }));
-                } else if (mode === 'resizing' && selectedShapeIndex !== null) {
+                } else if (mode === 'marquee') {
+                    // マーキー矩形更新
+                    setMarquee(prev => prev ? { ...prev, ex: e.clientX, ey: e.clientY } : null);
+
+                    // マーキー選択処理
+                    if (svgRef.current) {
+                        const rect = svgRef.current.getBoundingClientRect();
+                        const scale = viewState.scale * BASE_SCALE;
+                        const toWorld = (screenX, screenY) => ({
+                            x: (screenX - rect.left - viewState.x) / scale,
+                            y: (screenY - rect.top - viewState.y) / scale
+                        });
+
+                        const p1 = toWorld(dragRef.current.sx, dragRef.current.sy);
+                        const p2 = toWorld(e.clientX, e.clientY);
+                        const minX = Math.min(p1.x, p2.x);
+                        const maxX = Math.max(p1.x, p2.x);
+                        const minY = Math.min(p1.y, p2.y);
+                        const maxY = Math.max(p1.y, p2.y);
+
+                        const inBoxIndices = asset.shapes.map((s, i) => {
+                            // バウンディングボックスで判定
+                            const sx = s.x || 0;
+                            const sy = s.y || 0;
+                            const sw = s.w || 0;
+                            const sh = s.h || 0;
+                            // シェイプの中心または範囲が交差するか？ここでは中心判定
+                            let cx, cy;
+                            if (s.type === 'polygon' && s.points) {
+                                const xs = s.points.map(p => p.x);
+                                const ys = s.points.map(p => p.y);
+                                const minPx = Math.min(...xs);
+                                const maxPx = Math.max(...xs);
+                                const minPy = Math.min(...ys);
+                                const maxPy = Math.max(...ys);
+                                cx = minPx + (maxPx - minPx) / 2;
+                                cy = minPy + (maxPy - minPy) / 2;
+                            } else if (s.type === 'ellipse' || s.type === 'arc' || s.type === 'circle') {
+                                cx = s.cx !== undefined ? s.cx : (s.x + s.w / 2);
+                                cy = s.cy !== undefined ? s.cy : (s.y + s.h / 2);
+                            } else {
+                                cx = (s.x || 0) + (s.w || 0) / 2;
+                                cy = (s.y || 0) + (s.h || 0) / 2;
+                            }
+                            return (cx >= minX && cx <= maxX && cy >= minY && cy <= maxY) ? i : -1;
+                        }).filter(i => i !== -1);
+
+                        // Ctrl押してる場合は追加選択
+                        const initialSelected = dragRef.current.prevSelectedIndices || [];
+                        const newIndices = [...new Set([...initialSelected, ...inBoxIndices])];
+                        setSelectedShapeIndices(newIndices);
+                    }
+                } else if (mode === 'resizing' && selectedShapeIndices.length > 0) {
                     const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
                     const dy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
                     const newShapes = [...asset.shapes];
-                    const targetShape = newShapes[selectedShapeIndex];
+                    const targetIdx = selectedShapeIndices[0]; // Resizeは単一
+                    const targetShape = newShapes[targetIdx];
                     const resizeMode = dragRef.current.resizeMode;
 
                     if (resizeMode === 'both') {
                         const aspect = dragRef.current.shapeW / dragRef.current.shapeH;
-                        const newW = Math.max(10, Math.round((dragRef.current.shapeW + dx) / SNAP_UNIT) * SNAP_UNIT);
-                        const newH = Math.round(newW / aspect / SNAP_UNIT) * SNAP_UNIT;
-                        targetShape.w = newW;
-                        targetShape.h = newH;
-                    } else if (resizeMode === 'horizontal') {
-                        targetShape.w = Math.max(10, Math.round((dragRef.current.shapeW + dx) / SNAP_UNIT) * SNAP_UNIT);
-                    } else if (resizeMode === 'vertical') {
-                        targetShape.h = Math.max(10, Math.round((dragRef.current.shapeH + dy) / SNAP_UNIT) * SNAP_UNIT);
+                        let newW = dragRef.current.shapeW + dx;
+                        let newH = dragRef.current.shapeH + dy;
+                        if (!e.shiftKey) {
+                            newW = Math.round(newW / SNAP_UNIT) * SNAP_UNIT;
+                            newH = Math.round(newH / SNAP_UNIT) * SNAP_UNIT;
+                        }
+                        newW = Math.max(10, newW);
+                        newH = Math.max(10, newH);
+                        newShapes[targetIdx] = { ...targetShape, w: newW, h: newH };
+                    } else if (resizeMode === 'width') {
+                        let newW = dragRef.current.shapeW + dx;
+                        if (!e.shiftKey) newW = Math.round(newW / SNAP_UNIT) * SNAP_UNIT;
+                        newW = Math.max(10, newW);
+                        newShapes[targetIdx] = { ...targetShape, w: newW };
+                    } else if (resizeMode === 'height') {
+                        let newH = dragRef.current.shapeH + dy;
+                        if (!e.shiftKey) newH = Math.round(newH / SNAP_UNIT) * SNAP_UNIT;
+                        newH = Math.max(10, newH);
+                        newShapes[targetIdx] = { ...targetShape, h: newH };
                     }
-                    updateAssetShapes(newShapes);
-                } else if (mode === 'draggingShape' && selectedShapeIndex !== null) {
-                    const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
-                    const dy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
-                    const sdx = Math.round(dx / SNAP_UNIT) * SNAP_UNIT;
-                    const sdy = Math.round(dy / SNAP_UNIT) * SNAP_UNIT;
+                    setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                } else if (mode === 'draggingShape') {
+                    const rawDx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
+                    const rawDy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
 
-                    const newShapes = [...asset.shapes];
-                    const targetShape = newShapes[selectedShapeIndex];
-                    if (targetShape.type === 'polygon' && dragRef.current.initialPoints) {
-                        targetShape.points = dragRef.current.initialPoints.map(p => ({
-                            ...p,
-                            x: p.x + sdx,
-                            y: p.y + sdy
-                        }));
-                    } else if (targetShape.type === 'ellipse') {
-                        targetShape.cx = (dragRef.current.shapeCX || 0) + sdx;
-                        targetShape.cy = (dragRef.current.shapeCY || 0) + sdy;
-                    } else {
-                        targetShape.x = dragRef.current.shapeX + sdx;
-                        targetShape.y = dragRef.current.shapeY + sdy;
+                    let moveX = rawDx;
+                    let moveY = rawDy;
+
+                    // スナップ計算：基準となるシェイプ（アンカー）の位置をスナップさせ、その移動量を全体に適用
+                    if (asset.snap && !e.shiftKey) {
+                        const anchorX = dragRef.current.anchorX || 0;
+                        const anchorY = dragRef.current.anchorY || 0;
+                        const targetX = anchorX + rawDx;
+                        const targetY = anchorY + rawDy;
+                        const snappedX = Math.round(targetX / SNAP_UNIT) * SNAP_UNIT;
+                        const snappedY = Math.round(targetY / SNAP_UNIT) * SNAP_UNIT;
+                        moveX = snappedX - anchorX;
+                        moveY = snappedY - anchorY;
                     }
-                    updateAssetShapes(newShapes);
-                } else if (mode === 'draggingPoint' && selectedShapeIndex !== null && selectedPointIndex !== null) {
-                    const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
-                    const dy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
-                    const newX = Math.round((dragRef.current.pointX + dx) / SNAP_UNIT) * SNAP_UNIT;
-                    const newY = Math.round((dragRef.current.pointY + dy) / SNAP_UNIT) * SNAP_UNIT;
 
                     const newShapes = [...asset.shapes];
-                    const pts = newShapes[selectedShapeIndex].points;
-                    pts[selectedPointIndex] = { ...pts[selectedPointIndex], x: newX, y: newY };
-                    updateAssetShapes(newShapes);
-                } else if (mode === 'draggingHandle' && selectedShapeIndex !== null && selectedPointIndex !== null) {
+                    const initialShapes = dragRef.current.initialShapes || [];
+
+                    initialShapes.forEach(({ index, data }) => {
+                        let updatedShape = { ...newShapes[index] };
+
+                        // 座標移動
+                        if (data.x !== undefined) updatedShape.x = (data.x || 0) + moveX;
+                        if (data.y !== undefined) updatedShape.y = (data.y || 0) + moveY;
+                        if (data.cx !== undefined) updatedShape.cx = (data.cx || 0) + moveX;
+                        if (data.cy !== undefined) updatedShape.cy = (data.cy || 0) + moveY;
+
+                        // Points移動
+                        if (data.points) {
+                            updatedShape.points = data.points.map(p => ({ ...p, x: p.x + moveX, y: p.y + moveY }));
+                        }
+
+                        newShapes[index] = updatedShape;
+                    });
+
+                    setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+
+                } else if (mode === 'draggingPoint' && selectedShapeIndices.length > 0 && selectedPointIndex !== null) {
                     const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
                     const dy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
-                    const newX = Math.round((dragRef.current.handleX + dx) / SNAP_UNIT) * SNAP_UNIT;
-                    const newY = Math.round((dragRef.current.handleY + dy) / SNAP_UNIT) * SNAP_UNIT;
-
                     const newShapes = [...asset.shapes];
-                    const handles = [...newShapes[selectedShapeIndex].points[selectedPointIndex].handles];
-                    handles[dragRef.current.handleIndex] = { x: newX, y: newY };
-                    newShapes[selectedShapeIndex].points[selectedPointIndex] = {
-                        ...newShapes[selectedShapeIndex].points[selectedPointIndex],
-                        handles
+                    const targetIdx = selectedShapeIndices[0];
+
+                    const pts = [...newShapes[targetIdx].points];
+                    let nx = dragRef.current.pointX + dx;
+                    let ny = dragRef.current.pointY + dy;
+                    if (!e.shiftKey) {
+                        nx = Math.round(nx / SNAP_UNIT) * SNAP_UNIT;
+                        ny = Math.round(ny / SNAP_UNIT) * SNAP_UNIT;
+                    }
+
+                    pts[selectedPointIndex] = { ...pts[selectedPointIndex], x: nx, y: ny };
+                    newShapes[targetIdx].points = pts;
+
+                    // x, y, w, h の再計算 (Polygon用)
+                    if (newShapes[targetIdx].type === 'polygon') {
+                        const xs = pts.map(p => p.x);
+                        const ys = pts.map(p => p.y);
+                        newShapes[targetIdx].x = Math.min(...xs);
+                        newShapes[targetIdx].y = Math.min(...ys);
+                        newShapes[targetIdx].w = Math.max(...xs) - newShapes[targetIdx].x;
+                        newShapes[targetIdx].h = Math.max(...ys) - newShapes[targetIdx].y;
+                    }
+
+                    setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+
+                } else if (mode === 'draggingHandle' && selectedShapeIndices.length > 0 && selectedPointIndex !== null) {
+                    const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
+                    const dy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
+                    const newShapes = [...asset.shapes];
+                    const targetIdx = selectedShapeIndices[0];
+
+                    const pts = [...newShapes[targetIdx].points];
+                    const pt = { ...pts[selectedPointIndex] };
+                    const handles = [...pt.handles];
+                    const hIndex = dragRef.current.handleIndex;
+
+                    handles[hIndex] = {
+                        x: dragRef.current.handleX + dx,
+                        y: dragRef.current.handleY + dy
                     };
-                    updateAssetShapes(newShapes);
-                } else if (mode === 'draggingAngle' && selectedShapeIndex !== null) {
-                    // マウス位置から角度を計算
-                    const rect = dragRef.current.rect;
-                    const mx = (e.clientX - rect.left - viewState.x) / viewState.scale / BASE_SCALE;
-                    const my = (e.clientY - rect.top - viewState.y) / viewState.scale / BASE_SCALE;
-                    const cx = dragRef.current.shapeCX;
-                    const cy = dragRef.current.shapeCY;
+                    pt.handles = handles;
+                    pts[selectedPointIndex] = pt;
+                    newShapes[targetIdx].points = pts;
 
-                    // 中心からマウスへの角度（度）
-                    let angle = Math.atan2(my - cy, mx - cx) * 180 / Math.PI;
-                    // 5度刻みにスナップ
-                    angle = Math.round(angle / 5) * 5;
+                    setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+
+                } else if (mode === 'draggingAngle' && selectedShapeIndices.length > 0) {
+                    const targetIdx = selectedShapeIndices[0];
+                    const rect = svgRef.current.getBoundingClientRect();
+                    const cx = dragRef.current.cx; // screen coord
+                    const cy = dragRef.current.cy;
+                    const angle = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
+                    const deg = (angle + 360) % 360; // 0-360
 
                     const newShapes = [...asset.shapes];
-                    const targetShape = newShapes[selectedShapeIndex];
-                    if (dragRef.current.angleType === 'startAngle') {
-                        targetShape.startAngle = angle;
-                    } else {
-                        targetShape.endAngle = angle;
+                    // 15度スナップ (Shiftを押していない時)
+                    const snapped = e.shiftKey ? deg : Math.round(deg / 15) * 15;
+                    newShapes[targetIdx][dragRef.current.targetProp] = snapped;
+                    setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+
+                } else if (mode === 'draggingRotation' && selectedShapeIndices.length > 0) {
+                    const targetIdx = selectedShapeIndices[0];
+                    const cx = dragRef.current.cx;
+                    const cy = dragRef.current.cy;
+                    const currentAngle = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
+                    const delta = currentAngle - dragRef.current.startAngle;
+                    let newRot = (dragRef.current.initialRotation + delta + 360) % 360;
+
+                    // 15度スナップ (Shiftを押していない時)
+                    if (!e.shiftKey) {
+                        newRot = Math.round(newRot / 15) * 15;
                     }
-                    updateAssetShapes(newShapes);
-                } else if (mode === 'draggingRotation' && selectedShapeIndex !== null) {
-                    // マウス位置から回転角度を計算
-                    const rect = dragRef.current.rect;
-                    const mx = (e.clientX - rect.left - viewState.x) / viewState.scale / BASE_SCALE;
-                    const my = (e.clientY - rect.top - viewState.y) / viewState.scale / BASE_SCALE;
-                    const cx = dragRef.current.shapeCX;
-                    const cy = dragRef.current.shapeCY;
-
-                    // 中心からマウスへの角度 - 上向きが0度になるように調整
-                    let angle = Math.atan2(mx - cx, cy - my) * 180 / Math.PI;
-                    // 5度刻みにスナップ
-                    angle = Math.round(angle / 5) * 5;
 
                     const newShapes = [...asset.shapes];
-                    newShapes[selectedShapeIndex].rotation = angle;
-                    updateAssetShapes(newShapes);
-                } else if (mode === 'draggingRadius' && selectedShapeIndex !== null) {
-                    // マウス位置から半径を計算
-                    const rect = dragRef.current.rect;
-                    const mx = (e.clientX - rect.left - viewState.x) / viewState.scale / BASE_SCALE;
-                    const my = (e.clientY - rect.top - viewState.y) / viewState.scale / BASE_SCALE;
-                    const cx = dragRef.current.shapeCX;
-                    const cy = dragRef.current.shapeCY;
+                    newShapes[targetIdx].rotation = newRot;
+                    setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
 
+                } else if (mode === 'draggingRadius' && selectedShapeIndices.length > 0) {
+                    const targetIdx = selectedShapeIndices[0];
                     const newShapes = [...asset.shapes];
-                    const targetShape = newShapes[selectedShapeIndex];
-                    if (dragRef.current.radiusType === 'rx') {
-                        // 横半径：中心からのX距離
-                        const newRx = Math.max(10, Math.round(Math.abs(mx - cx) / SNAP_UNIT) * SNAP_UNIT);
-                        targetShape.rx = newRx;
-                    } else {
-                        // 縦半径：中心からのY距離
-                        const newRy = Math.max(10, Math.round(Math.abs(my - cy) / SNAP_UNIT) * SNAP_UNIT);
-                        targetShape.ry = newRy;
+                    const scale = viewState.scale * BASE_SCALE;
+
+                    const dx = (e.clientX - dragRef.current.sx) / scale;
+                    // 中心からの距離で半径を決める方が自然だが、簡易的にdxで増減
+                    let newVal = dragRef.current.initialVal + dx;
+                    if (!e.shiftKey) {
+                        newVal = Math.round(newVal / SNAP_UNIT) * SNAP_UNIT;
                     }
-                    updateAssetShapes(newShapes);
+                    newVal = Math.max(1, newVal);
+
+                    newShapes[targetIdx][dragRef.current.targetProp] = newVal;
+                    setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
                 }
             };
+
             const handleUp = () => {
-                dragRef.current.mode = 'idle';
+                setMarquee(null);
                 setCursorMode('idle');
+                dragRef.current = { mode: 'idle' };
             };
 
-            const handleDeleteShape = (e, i) => {
-                e.stopPropagation();
+            const handleDeleteShape = (index) => {
+                // 配列対応：indexだけでなくselectedShapeIndicesに含まれるものも削除対象にしたいが、
+                // 個別削除ボタンからの呼び出しならindexのみ。
                 if (!confirm('このシェイプを削除しますか？')) return;
-                const newShapes = asset.shapes.filter((_, idx) => idx !== i);
-                setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
-                setSelectedShapeIndex(null);
+                const newShapes = asset.shapes.filter((_, i) => i !== index);
+                setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                // インデックスがずれるので選択解除
+                setSelectedShapeIndices([]);
             };
             const updateAssetShapes = (newShapes) => {
                 let maxX = 0, maxY = 0;
@@ -916,12 +1160,13 @@
                 ? asset.shapes
                 : (asset ? [{ type: asset.shape || 'rect', w: asset.w, h: asset.h, x: 0, y: 0, color: asset.color, points: asset.points || createRectPath(asset.w, asset.h) }] : []);
 
-            return <DesignCanvasRender viewState={viewState} asset={asset} shapes={shapes} selectedShapeIndex={selectedShapeIndex} selectedPointIndex={selectedPointIndex} onDown={handleDown} onMove={handleMove} onUp={handleUp} onDeleteShape={handleDeleteShape} svgRef={svgRef} />;
+            return <DesignCanvasRender viewState={viewState} asset={asset} shapes={shapes} selectedShapeIndices={selectedShapeIndices} selectedPointIndex={selectedPointIndex} onDown={handleDown} onMove={handleMove} onUp={handleUp} onDeleteShape={handleDeleteShape} svgRef={svgRef} marquee={marquee} />;
         };
 
         const LayoutCanvas = ({ viewState, setViewState, assets, instances, setInstances, selectedIds, setSelectedIds }) => {
             const dragRef = useRef({ isDragging: false, mode: null });
             const svgRef = useRef(null);
+            const [marquee, setMarquee] = useState(null); // { sx, sy, ex, ey } 画面座標
 
             const handleDown = (e, id) => {
                 // 左クリック以外は無視（中クリックは例外でパン用）
@@ -932,28 +1177,49 @@
                     try { svgRef.current.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
                 }
 
-                const isPan = e.button === 1 || (id === null && e.button === 0);
+                // 中クリックのみパン、背景左クリックはマーキー選択
+                const isPan = e.button === 1;
+                const isMarquee = (id === null && e.button === 0);
 
                 let targetIds = [];
                 if (id) {
-                    if (selectedIds.includes(id)) {
+                    if (e.ctrlKey || e.metaKey) {
+                        // Ctrl+クリック: 選択にトグル
+                        if (selectedIds.includes(id)) {
+                            targetIds = selectedIds.filter(x => x !== id);
+                        } else {
+                            targetIds = [...selectedIds, id];
+                        }
+                        setSelectedIds(targetIds);
+                    } else if (selectedIds.includes(id)) {
+                        // 既に選択中のアイテムをクリック: 選択維持
                         targetIds = [...selectedIds];
                     } else {
+                        // 通常クリック: 単一選択
                         targetIds = [id];
                         setSelectedIds([id]);
                     }
-                } else {
-                    // 背景クリック時は選択を解除
+                } else if (!isMarquee) {
+                    // 背景クリック時（マーキー以外）は選択を解除
                     setSelectedIds([]);
+                }
+
+                // マーキー選択開始
+                if (isMarquee) {
+                    setMarquee({ sx: e.clientX, sy: e.clientY, ex: e.clientX, ey: e.clientY });
+                    if (!e.ctrlKey && !e.metaKey) {
+                        setSelectedIds([]); // Ctrl押していなければ選択解除
+                    }
                 }
 
                 dragRef.current = {
                     isDragging: true,
-                    mode: isPan ? 'panning' : (id ? 'dragging' : null),
+                    mode: isPan ? 'panning' : (isMarquee ? 'marquee' : (id ? 'dragging' : null)),
                     sx: e.clientX, sy: e.clientY,
                     vx: viewState.x, vy: viewState.y,
                     items: instances.map(i => ({ ...i })),
-                    targetIds: targetIds
+                    targetIds: targetIds,
+                    prevSelectedIds: e.ctrlKey || e.metaKey ? [...selectedIds] : []
                 };
 
                 if (!isPan && id) {
@@ -981,6 +1247,43 @@
                 const dy = e.clientY - dragRef.current.sy;
                 if (dragRef.current.mode === 'panning') {
                     setViewState(p => ({ ...p, x: dragRef.current.vx + dx, y: dragRef.current.vy + dy }));
+                } else if (dragRef.current.mode === 'marquee') {
+                    // マーキー矩形を更新
+                    setMarquee(prev => prev ? { ...prev, ex: e.clientX, ey: e.clientY } : null);
+
+                    // マーキー矩形内のアイテムを選択
+                    if (svgRef.current) {
+                        const rect = svgRef.current.getBoundingClientRect();
+                        const scale = viewState.scale * BASE_SCALE;
+
+                        // 画面座標からワールド座標に変換
+                        const toWorld = (screenX, screenY) => ({
+                            x: (screenX - rect.left - viewState.x) / scale,
+                            y: (screenY - rect.top - viewState.y) / scale
+                        });
+
+                        const p1 = toWorld(dragRef.current.sx, dragRef.current.sy);
+                        const p2 = toWorld(e.clientX, e.clientY);
+                        const minX = Math.min(p1.x, p2.x);
+                        const maxX = Math.max(p1.x, p2.x);
+                        const minY = Math.min(p1.y, p2.y);
+                        const maxY = Math.max(p1.y, p2.y);
+
+                        // 矩形内のインスタンスを検出
+                        const inBox = instances.filter(inst => {
+                            const asset = assets.find(a => a.id === inst.assetId);
+                            const w = inst.type === 'text' ? 100 : (asset?.w || 0);
+                            const h = inst.type === 'text' ? 50 : (asset?.h || 0);
+                            // アイテムの中心がマーキー内にあるか
+                            const cx = inst.x + w / 2;
+                            const cy = inst.y + h / 2;
+                            return cx >= minX && cx <= maxX && cy >= minY && cy <= maxY;
+                        }).map(i => i.id);
+
+                        // Ctrl押してる場合は追加選択
+                        const newIds = [...new Set([...dragRef.current.prevSelectedIds, ...inBox])];
+                        setSelectedIds(newIds);
+                    }
                 } else if (dragRef.current.mode === 'dragging') {
                     const wDx = dx / viewState.scale / BASE_SCALE;
                     const wDy = dy / viewState.scale / BASE_SCALE;
@@ -992,7 +1295,7 @@
                             const asset = assets.find(a => a.id === inst.assetId);
                             let nx = org.x + wDx;
                             let ny = org.y + wDy;
-                            if (inst.type !== 'text' && asset?.snap && inst.rotation % 90 === 0) {
+                            if (inst.type !== 'text' && asset?.snap && inst.rotation % 90 === 0 && !e.shiftKey) {
                                 nx = Math.round(nx / SNAP_UNIT) * SNAP_UNIT;
                                 ny = Math.round(ny / SNAP_UNIT) * SNAP_UNIT;
                             }
@@ -1002,7 +1305,10 @@
                     }));
                 }
             };
-            const handleUp = () => { dragRef.current = { isDragging: false, mode: null, targetIds: [] }; };
+            const handleUp = () => {
+                setMarquee(null);
+                dragRef.current = { isDragging: false, mode: null, targetIds: [] };
+            };
 
             const sortedItems = useMemo(() => {
                 return instances.map(inst => {
@@ -1027,6 +1333,22 @@
                             {sortedItems.map(item => <RenderItem key={item.id} item={item} isSelected={selectedIds.includes(item.id)} onDown={handleDown} />)}
                         </g>
                     </svg>
+                    {/* マーキー選択矩形 */}
+                    {marquee && (
+                        <div
+                            style={{
+                                position: 'fixed',
+                                left: Math.min(marquee.sx, marquee.ex),
+                                top: Math.min(marquee.sy, marquee.ey),
+                                width: Math.abs(marquee.ex - marquee.sx),
+                                height: Math.abs(marquee.ey - marquee.sy),
+                                border: '2px dashed #3b82f6',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                pointerEvents: 'none',
+                                zIndex: 9999
+                            }}
+                        />
+                    )}
                 </div>
             );
         };
@@ -1163,12 +1485,31 @@
 
             const update = (k, v) => setInstances(p => p.map(i => i.id === item.id ? { ...i, [k]: v } : i));
 
-            // グループ整列機能
+            // 全体を0,0に揃える機能（すべてのインスタンスをグループとして移動）
             const alignToOrigin = () => {
+                if (instances.length === 0) return;
+                const minX = Math.min(...instances.map(i => i.x));
+                const minY = Math.min(...instances.map(i => i.y));
+                if (minX === 0 && minY === 0) return;
+                setInstances(prev => prev.map(i => ({
+                    ...i,
+                    x: i.x - minX,
+                    y: i.y - minY
+                })));
+            };
+
+            const asset = assets.find(a => a.id === item.assetId);
+
+            // 複数選択時の表示
+            const multiSelected = selectedIds.length > 1;
+
+            // 選択アイテムを0,0に揃える（複数選択対応）
+            const alignSelectedToOrigin = () => {
                 const targets = instances.filter(i => selectedIds.includes(i.id));
                 if (targets.length === 0) return;
                 const minX = Math.min(...targets.map(i => i.x));
                 const minY = Math.min(...targets.map(i => i.y));
+                if (minX === 0 && minY === 0) return;
                 setInstances(prev => prev.map(i => {
                     if (selectedIds.includes(i.id)) {
                         return { ...i, x: i.x - minX, y: i.y - minY };
@@ -1177,101 +1518,153 @@
                 }));
             };
 
-            const asset = assets.find(a => a.id === item.assetId);
+            // 選択アイテムを一括削除
+            const deleteSelected = () => {
+                if (!confirm(`選択した ${selectedIds.length} 個のアイテムを削除しますか？`)) return;
+                setInstances(prev => prev.filter(i => !selectedIds.includes(i.id)));
+                setSelectedIds([]);
+            };
 
             return (
                 <div className="h-full flex flex-col">
                     <div className="sidebar-header">
-                        <span>配置プロパティ</span>
-                        <button onClick={alignToOrigin} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100">
+                        <span>{multiSelected ? `${selectedIds.length}個選択中` : '配置プロパティ'}</span>
+                        <button onClick={multiSelected ? alignSelectedToOrigin : alignToOrigin} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100">
                             0,0へ移動
                         </button>
                     </div>
 
                     <div className="p-3 overflow-y-auto flex-1">
-                        {/* Selected Item Info */}
-                        <div className="bg-blue-50 border border-blue-100 rounded p-3 mb-4">
-                            <div className="font-bold text-sm text-blue-800 mb-1">{item.type === 'text' ? 'テキスト' : asset?.name}</div>
-                            <div className="text-[10px] text-blue-400 font-mono">{item.id}</div>
-                        </div>
+                        {/* 複数選択時 */}
+                        {multiSelected ? (
+                            <div className="space-y-4">
+                                <div className="bg-purple-50 border border-purple-100 rounded p-3">
+                                    <div className="font-bold text-sm text-purple-800 mb-2">{selectedIds.length} 個のアイテムを選択中</div>
+                                    <div className="text-[10px] text-purple-500">Ctrl+クリックで選択を調整</div>
+                                </div>
+                                <div className="space-y-2">
+                                    <button
+                                        onClick={alignSelectedToOrigin}
+                                        className="btn-action bg-blue-500 text-white hover:bg-blue-600 shadow-sm"
+                                    >
+                                        <Icon p={Icons.Move} size={14} /> 選択を0,0へ揃える
+                                    </button>
+                                    <button
+                                        onClick={deleteSelected}
+                                        className="btn-action bg-red-500 text-white hover:bg-red-600 shadow-sm"
+                                    >
+                                        <Icon p={Icons.Trash} size={14} /> 選択を削除
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedIds([])}
+                                        className="btn-action bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                    >
+                                        選択解除
+                                    </button>
+                                </div>
+                                <div className="border-t pt-3">
+                                    <div className="text-xs font-bold text-gray-400 mb-2">選択中のアイテム</div>
+                                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                                        {selectedIds.map(id => {
+                                            const inst = instances.find(i => i.id === id);
+                                            const a = inst ? assets.find(x => x.id === inst.assetId) : null;
+                                            return (
+                                                <div key={id} className="text-xs p-2 bg-gray-50 rounded flex items-center justify-between">
+                                                    <span className="truncate">{a?.name || inst?.text || 'テキスト'}</span>
+                                                    <button onClick={() => setSelectedIds(prev => prev.filter(x => x !== id))} className="text-gray-300 hover:text-red-500">×</button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                {/* Selected Item Info */}
+                                <div className="bg-blue-50 border border-blue-100 rounded p-3 mb-4">
+                                    <div className="font-bold text-sm text-blue-800 mb-1">{item.type === 'text' ? 'テキスト' : asset?.name}</div>
+                                    <div className="text-[10px] text-blue-400 font-mono">{item.id}</div>
+                                </div>
 
-                        {/* Actions */}
-                        {item.type !== 'text' && (
-                            <button
-                                onClick={() => {
-                                    setDesignTargetId(item.assetId);
-                                    setMode('design');
-                                }}
-                                className="btn-action bg-orange-500 text-white hover:bg-orange-600 mb-4 shadow-sm"
-                            >
-                                <Icon p={Icons.Pen} size={14} /> 形状を編集 (設計モード)
-                            </button>
+                                {/* Actions */}
+                                {item.type !== 'text' && (
+                                    <button
+                                        onClick={() => {
+                                            setDesignTargetId(item.assetId);
+                                            setMode('design');
+                                        }}
+                                        className="btn-action bg-orange-500 text-white hover:bg-orange-600 mb-4 shadow-sm"
+                                    >
+                                        <Icon p={Icons.Pen} size={14} /> 形状を編集 (設計モード)
+                                    </button>
+                                )}
+
+                                {/* Coordinates */}
+                                <div className="mb-4">
+                                    <div className="text-xs font-bold text-gray-400 mb-2 border-b pb-1">座標・回転</div>
+                                    <div className="prop-row">
+                                        <label className="prop-label">X (mm)</label>
+                                        <input type="number" value={toMM(item.x)} onChange={e => update('x', fromMM(Number(e.target.value)))} className="prop-input" />
+                                    </div>
+                                    <div className="prop-row">
+                                        <label className="prop-label">Y (mm)</label>
+                                        <input type="number" value={toMM(item.y)} onChange={e => update('y', fromMM(Number(e.target.value)))} className="prop-input" />
+                                    </div>
+                                    <div className="prop-row">
+                                        <label className="prop-label">回転 (°)</label>
+                                        <div className="flex-1 flex gap-2">
+                                            <input type="number" value={item.rotation} onChange={e => update('rotation', Number(e.target.value))} className="prop-input" />
+                                            <button onClick={() => update('rotation', (item.rotation + 90) % 360)} className="px-2 border rounded bg-gray-50 hover:bg-gray-100 text-xs">↻</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Content (Text only) */}
+                                {item.type === 'text' && (
+                                    <div className="mb-4">
+                                        <div className="text-xs font-bold text-gray-400 mb-2 border-b pb-1">テキスト設定</div>
+                                        <div className="mb-2">
+                                            <label className="prop-label block text-left mb-1">内容</label>
+                                            <textarea value={item.text} onChange={e => update('text', e.target.value)} className="w-full border rounded p-2 text-sm h-20" />
+                                        </div>
+                                        <div className="prop-row">
+                                            <label className="prop-label">サイズ</label>
+                                            <input type="number" value={item.fontSize} onChange={e => update('fontSize', Number(e.target.value))} className="prop-input" />
+                                        </div>
+                                        <div className="prop-row">
+                                            <label className="prop-label">色</label>
+                                            <input type="color" value={item.color} onChange={e => update('color', e.target.value)} className="h-8 w-full cursor-pointer" />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Copy / Lock / Delete */}
+                                <div className="border-t pt-4 mt-2 space-y-2">
+                                    <button onClick={() => {
+                                        const newInst = { ...item, id: `${item.type === 'text' ? 't' : 'i'}-${Date.now()}`, x: item.x + 10, y: item.y + 10 };
+                                        setInstances(p => [...p, newInst]);
+                                        setSelectedIds([newInst.id]);
+                                    }} className="btn-action bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100">
+                                        <Icon p={Icons.Copy} size={14} /> コピーして配置
+                                    </button>
+                                    <label className="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-gray-50 border">
+                                        <input type="checkbox" checked={item.locked} onChange={e => update('locked', e.target.checked)} className="accent-blue-600" />
+                                        <span className="text-xs font-bold text-gray-600 flex items-center gap-1">
+                                            {item.locked ? <Icon p={Icons.Lock} size={12} /> : <Icon p={Icons.Unlock} size={12} />} ロックする
+                                        </span>
+                                    </label>
+                                    <button onClick={() => { setInstances(p => p.filter(i => i.id !== item.id)); setSelectedIds([]); }} className="btn-action bg-white border border-red-200 text-red-500 hover:bg-red-50">
+                                        <Icon p={Icons.Trash} size={14} /> 削除
+                                    </button>
+                                </div>
+                            </>
                         )}
-
-                        {/* Coordinates */}
-                        <div className="mb-4">
-                            <div className="text-xs font-bold text-gray-400 mb-2 border-b pb-1">座標・回転</div>
-                            <div className="prop-row">
-                                <label className="prop-label">X (mm)</label>
-                                <input type="number" value={toMM(item.x)} onChange={e => update('x', fromMM(Number(e.target.value)))} className="prop-input" />
-                            </div>
-                            <div className="prop-row">
-                                <label className="prop-label">Y (mm)</label>
-                                <input type="number" value={toMM(item.y)} onChange={e => update('y', fromMM(Number(e.target.value)))} className="prop-input" />
-                            </div>
-                            <div className="prop-row">
-                                <label className="prop-label">回転 (°)</label>
-                                <div className="flex-1 flex gap-2">
-                                    <input type="number" value={item.rotation} onChange={e => update('rotation', Number(e.target.value))} className="prop-input" />
-                                    <button onClick={() => update('rotation', (item.rotation + 90) % 360)} className="px-2 border rounded bg-gray-50 hover:bg-gray-100 text-xs">↻</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Content (Text only) */}
-                        {item.type === 'text' && (
-                            <div className="mb-4">
-                                <div className="text-xs font-bold text-gray-400 mb-2 border-b pb-1">テキスト設定</div>
-                                <div className="mb-2">
-                                    <label className="prop-label block text-left mb-1">内容</label>
-                                    <textarea value={item.text} onChange={e => update('text', e.target.value)} className="w-full border rounded p-2 text-sm h-20" />
-                                </div>
-                                <div className="prop-row">
-                                    <label className="prop-label">サイズ</label>
-                                    <input type="number" value={item.fontSize} onChange={e => update('fontSize', Number(e.target.value))} className="prop-input" />
-                                </div>
-                                <div className="prop-row">
-                                    <label className="prop-label">色</label>
-                                    <input type="color" value={item.color} onChange={e => update('color', e.target.value)} className="h-8 w-full cursor-pointer" />
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Copy / Lock / Delete */}
-                        <div className="border-t pt-4 mt-2 space-y-2">
-                            <button onClick={() => {
-                                const newInst = { ...item, id: `${item.type === 'text' ? 't' : 'i'}-${Date.now()}`, x: item.x + 10, y: item.y + 10 };
-                                setInstances(p => [...p, newInst]);
-                                setSelectedIds([newInst.id]);
-                            }} className="btn-action bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100">
-                                <Icon p={Icons.Copy} size={14} /> コピーして配置
-                            </button>
-                            <label className="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-gray-50 border">
-                                <input type="checkbox" checked={item.locked} onChange={e => update('locked', e.target.checked)} className="accent-blue-600" />
-                                <span className="text-xs font-bold text-gray-600 flex items-center gap-1">
-                                    {item.locked ? <Icon p={Icons.Lock} size={12} /> : <Icon p={Icons.Unlock} size={12} />} ロックする
-                                </span>
-                            </label>
-                            <button onClick={() => { setInstances(p => p.filter(i => i.id !== item.id)); setSelectedIds([]); }} className="btn-action bg-white border border-red-200 text-red-500 hover:bg-red-50">
-                                <Icon p={Icons.Trash} size={14} /> 削除
-                            </button>
-                        </div>
                     </div>
                 </div>
             );
         };
 
-        const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, selectedShapeIndex, setSelectedShapeIndex, selectedPointIndex, setSelectedPointIndex, setDesignTargetId, palette, onAddToPalette }) => {
+        const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, selectedShapeIndices, setSelectedShapeIndices, selectedPointIndex, setSelectedPointIndex, setDesignTargetId, palette, onAddToPalette }) => {
             const asset = assets.find(a => a.id === designTargetId);
 
             // 未選択時
@@ -1284,21 +1677,151 @@
                 );
             }
 
+            const isMultiSelect = selectedShapeIndices.length > 1;
+            const targetIndex = selectedShapeIndices.length === 1 ? selectedShapeIndices[0] : null;
+            const selectedShape = (asset.shapes && targetIndex !== null) ? asset.shapes[targetIndex] : null;
+            const selectedPoint = (selectedShape && selectedShape.points && selectedPointIndex !== null) ? selectedShape.points[selectedPointIndex] : null;
+
             const updateRoot = (k, v) => { if (asset.source === 'global') return; setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, [k]: v } : a)); };
+
+            // 単一選択用更新関数
             const updateShape = (k, v) => {
-                if (asset.source === 'global' || selectedShapeIndex === null) return;
+                if (asset.source === 'global' || targetIndex === null) return;
                 const currentShapes = asset.shapes || [];
-                const newShapes = currentShapes.map((s, i) => i === selectedShapeIndex ? { ...s, [k]: v } : s);
+                const newShapes = currentShapes.map((s, i) => i === targetIndex ? { ...s, [k]: v } : s);
                 setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
             };
             const updatePoint = (k, v) => {
-                if (asset.source === 'global' || selectedShapeIndex === null || selectedPointIndex === null) return;
+                if (asset.source === 'global' || targetIndex === null || selectedPointIndex === null) return;
                 const newShapes = [...asset.shapes];
-                const newPts = [...newShapes[selectedShapeIndex].points];
+                const newPts = [...newShapes[targetIndex].points];
                 const newPt = { ...newPts[selectedPointIndex], [k]: v };
                 newPts[selectedPointIndex] = newPt;
-                newShapes[selectedShapeIndex].points = newPts;
+                newShapes[targetIndex].points = newPts;
                 setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+            };
+
+            // 一括操作用関数
+            const bulkUpdate = (updater) => {
+                const newShapes = asset.shapes.map((s, i) => {
+                    if (selectedShapeIndices.includes(i)) {
+                        return updater(s);
+                    }
+                    return s;
+                });
+                setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+            };
+
+            const bulkMove = (dx, dy) => {
+                bulkUpdate(s => {
+                    let ns = { ...s, x: (s.x || 0) + dx, y: (s.y || 0) + dy };
+                    if (s.cx !== undefined) ns.cx = (s.cx || 0) + dx;
+                    if (s.cy !== undefined) ns.cy = (s.cy || 0) + dy;
+                    if (s.points) ns.points = s.points.map(p => ({ ...p, x: p.x + dx, y: p.y + dy }));
+                    return ns;
+                });
+            };
+
+            const bulkDelete = () => {
+                if (!confirm(`${selectedShapeIndices.length}個のシェイプを削除しますか？`)) return;
+                const newShapes = asset.shapes.filter((_, i) => !selectedShapeIndices.includes(i));
+                setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                setSelectedShapeIndices([]);
+            };
+
+            const bulkColor = (color) => {
+                bulkUpdate(s => ({ ...s, color }));
+            };
+
+            const bulkResize = (scalePercent) => {
+                const scale = scalePercent / 100;
+                if (scale <= 0) return;
+
+                // 1. グループのバウンディングボックス（左上）を計算
+                let groupMinX = Infinity;
+                let groupMinY = Infinity;
+
+                selectedShapeIndices.forEach(index => {
+                    const s = asset.shapes[index];
+                    if (!s) return;
+                    if (s.points) {
+                        s.points.forEach(p => {
+                            if (p.x < groupMinX) groupMinX = p.x;
+                            if (p.y < groupMinY) groupMinY = p.y;
+                        });
+                    } else if (s.type === 'ellipse' || s.type === 'arc' || s.type === 'circle') {
+                        const cx = s.cx !== undefined ? s.cx : (s.x + s.w / 2);
+                        const cy = s.cy !== undefined ? s.cy : (s.y + s.h / 2);
+                        const rx = s.rx !== undefined ? s.rx : (s.w / 2);
+                        const ry = s.ry !== undefined ? s.ry : (s.h / 2);
+                        if (cx - rx < groupMinX) groupMinX = cx - rx;
+                        if (cy - ry < groupMinY) groupMinY = cy - ry;
+                    } else {
+                        const x = s.x || 0;
+                        const y = s.y || 0;
+                        if (x < groupMinX) groupMinX = x;
+                        if (y < groupMinY) groupMinY = y;
+                    }
+                });
+
+                if (groupMinX === Infinity || groupMinY === Infinity) return;
+
+                // 2. 左上基準でスケーリング
+                bulkUpdate(s => {
+                    let ns = { ...s };
+
+                    if (s.points) {
+                        ns.points = s.points.map(p => ({
+                            ...p,
+                            x: Math.round(groupMinX + (p.x - groupMinX) * scale),
+                            y: Math.round(groupMinY + (p.y - groupMinY) * scale)
+                        }));
+                        // width/height再計算 (Polygon用)
+                        const xs = ns.points.map(p => p.x);
+                        const ys = ns.points.map(p => p.y);
+                        ns.w = Math.max(...xs) - Math.min(...xs);
+                        ns.h = Math.max(...ys) - Math.min(...ys);
+                        // x, y も更新する場合があるが、pointsメインなら再計算不要かもしれないが一応更新
+                        ns.x = Math.min(...xs);
+                        ns.y = Math.min(...ys);
+
+                    } else if (s.type === 'ellipse' || s.type === 'arc' || s.type === 'circle') {
+                        const cx = s.cx !== undefined ? s.cx : (s.x + s.w / 2);
+                        const cy = s.cy !== undefined ? s.cy : (s.y + s.h / 2);
+                        const rx = s.rx !== undefined ? s.rx : (s.w / 2);
+                        const ry = s.ry !== undefined ? s.ry : (s.h / 2);
+
+                        const newCx = groupMinX + (cx - groupMinX) * scale;
+                        const newCy = groupMinY + (cy - groupMinY) * scale;
+                        const newRx = rx * scale;
+                        const newRy = ry * scale;
+
+                        if (s.cx !== undefined) ns.cx = Math.round(newCx);
+                        if (s.cy !== undefined) ns.cy = Math.round(newCy);
+                        if (s.rx !== undefined) ns.rx = Math.round(newRx);
+                        if (s.ry !== undefined) ns.ry = Math.round(newRy);
+                        // x, y, w, h も更新
+                        ns.x = Math.round(newCx - newRx);
+                        ns.y = Math.round(newCy - newRy);
+                        ns.w = Math.round(newRx * 2);
+                        ns.h = Math.round(newRy * 2);
+
+                    } else {
+                        // Rect / Image / Text etc
+                        // position
+                        const x = s.x || 0;
+                        const y = s.y || 0;
+                        const newX = groupMinX + (x - groupMinX) * scale;
+                        const newY = groupMinY + (y - groupMinY) * scale;
+
+                        ns.x = Math.round(newX);
+                        ns.y = Math.round(newY);
+                        if (s.w) ns.w = Math.round(s.w * scale);
+                        if (s.h) ns.h = Math.round(s.h * scale);
+                    }
+
+                    return ns;
+                });
             };
 
             const fork = () => {
@@ -1344,9 +1867,6 @@
                 </div>
             );
 
-            const selectedShape = (asset.shapes && selectedShapeIndex !== null) ? asset.shapes[selectedShapeIndex] : null;
-            const selectedPoint = (selectedShape && selectedShape.points && selectedPointIndex !== null) ? selectedShape.points[selectedPointIndex] : null;
-
             return (
                 <div className="h-full flex flex-col">
                     <div className="sidebar-header">
@@ -1378,7 +1898,49 @@
                         </div>
 
                         {/* Shape / Point Editor */}
-                        {selectedPoint ? (
+                        {isMultiSelect ? (
+                            <div className="bg-purple-50 border border-purple-100 rounded p-3 space-y-3">
+                                <div className="font-bold text-sm text-purple-800">{selectedShapeIndices.length} 個のシェイプを選択中</div>
+                                <div className="text-[10px] text-purple-500">一括操作</div>
+
+                                {/* 一括移動 */}
+                                <div className="prop-row">
+                                    <label className="prop-label">移動 (mm)</label>
+                                    <div className="flex gap-1">
+                                        <button onClick={() => bulkMove(-100, 0)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">←</button>
+                                        <button onClick={() => bulkMove(0, -100)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">↑</button>
+                                        <button onClick={() => bulkMove(0, 100)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">↓</button>
+                                        <button onClick={() => bulkMove(100, 0)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">→</button>
+                                    </div>
+                                </div>
+
+                                {/* 一括リサイズ */}
+                                <div className="prop-row">
+                                    <label className="prop-label">拡大縮小</label>
+                                    <div className="flex gap-1">
+                                        <button onClick={() => bulkResize(90)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50 text-xs">90%</button>
+                                        <button onClick={() => bulkResize(110)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50 text-xs">110%</button>
+                                    </div>
+                                </div>
+
+                                {/* 一括色変更 */}
+                                <div>
+                                    <label className="prop-label block mb-1">一括色変更</label>
+                                    <ColorPicker value={asset.color} onChange={bulkColor} palette={palette} onAddToPalette={onAddToPalette} />
+                                </div>
+
+                                {/* 一括削除 */}
+                                <button onClick={bulkDelete} className="w-full py-2 bg-red-500 text-white rounded text-xs hover:bg-red-600 shadow-sm mt-2">
+                                    選択したシェイプを削除
+                                </button>
+                                <button
+                                    onClick={() => setSelectedShapeIndices([])}
+                                    className="w-full py-1 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300 mt-1"
+                                >
+                                    選択解除
+                                </button>
+                            </div>
+                        ) : selectedPoint ? (
                             <div className="bg-white p-2 rounded border-2 border-red-300">
                                 <div className="text-xs font-bold text-red-600 mb-2">選択頂点 (mm)</div>
                                 <div className="prop-row">
@@ -1394,7 +1956,7 @@
                                         if (selectedShape.points.length <= 3) { alert('最低3点必要です'); return; }
                                         const newPts = selectedShape.points.filter((_, i) => i !== selectedPointIndex);
                                         const newShapes = [...asset.shapes];
-                                        newShapes[selectedShapeIndex].points = newPts;
+                                        newShapes[targetIndex].points = newPts;
                                         setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
                                         setSelectedPointIndex(null);
                                     }} className="w-full py-1.5 text-xs bg-red-50 border border-red-200 text-red-600 rounded hover:bg-red-100 font-bold">この頂点を削除</button>
@@ -1452,21 +2014,21 @@
                                                                 const newPts = [...selectedShape.points];
                                                                 newPts[idx] = { ...newPts[idx], x: fromMM(Number(e.target.value)) };
                                                                 const newShapes = [...asset.shapes];
-                                                                newShapes[selectedShapeIndex].points = newPts;
+                                                                newShapes[targetIndex].points = newPts;
                                                                 setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
                                                             }} className="flex-1 text-[10px] p-0.5 border rounded w-12 text-center" placeholder="X" />
                                                             <input type="number" value={toMM(pt.y)} onChange={e => {
                                                                 const newPts = [...selectedShape.points];
                                                                 newPts[idx] = { ...newPts[idx], y: fromMM(Number(e.target.value)) };
                                                                 const newShapes = [...asset.shapes];
-                                                                newShapes[selectedShapeIndex].points = newPts;
+                                                                newShapes[targetIndex].points = newPts;
                                                                 setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
                                                             }} className="flex-1 text-[10px] p-0.5 border rounded w-12 text-center" placeholder="Y" />
                                                             <button onClick={() => {
                                                                 if (selectedShape.points.length <= 3) { alert('最低3点必要です'); return; }
                                                                 const newPts = selectedShape.points.filter((_, i) => i !== idx);
                                                                 const newShapes = [...asset.shapes];
-                                                                newShapes[selectedShapeIndex].points = newPts;
+                                                                newShapes[targetIndex].points = newPts;
                                                                 setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
                                                                 if (selectedPointIndex === idx) setSelectedPointIndex(null);
                                                             }} className="text-[10px] text-red-400 hover:text-red-600 p-0.5" title="削除">×</button>
@@ -1482,7 +2044,7 @@
                                                                 const newPt = { x: (pt.x + nextPt.x) / 2, y: (pt.y + nextPt.y) / 2, handles: [] };
                                                                 const newPts = [...selectedShape.points.slice(0, idx + 1), newPt, ...selectedShape.points.slice(idx + 1)];
                                                                 const newShapes = [...asset.shapes];
-                                                                newShapes[selectedShapeIndex].points = newPts;
+                                                                newShapes[targetIndex].points = newPts;
                                                                 setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
                                                             }} className="text-[9px] text-green-600 hover:bg-green-100 px-1.5 py-0.5 rounded border border-green-300" title="頂点を追加">
                                                                 +頂点
@@ -1499,7 +2061,7 @@
                                                                     const midY = pt.y + (nextPt.y - pt.y) * t - 15;
                                                                     newPts[idx] = { ...newPts[idx], handles: [...handles, { x: midX, y: midY }] };
                                                                     const newShapes = [...asset.shapes];
-                                                                    newShapes[selectedShapeIndex].points = newPts;
+                                                                    newShapes[targetIndex].points = newPts;
                                                                     setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
                                                                 }} className="text-[9px] text-blue-600 hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-300" title="曲線制御点を追加">
                                                                     +曲線{pt.handles?.length === 1 ? '2' : ''}
@@ -1512,7 +2074,7 @@
                                                                     handles.pop(); // 最後の制御点を削除
                                                                     newPts[idx] = { ...newPts[idx], handles };
                                                                     const newShapes = [...asset.shapes];
-                                                                    newShapes[selectedShapeIndex].points = newPts;
+                                                                    newShapes[targetIndex].points = newPts;
                                                                     setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
                                                                 }} className="text-[9px] text-red-500 hover:bg-red-100 px-1 py-0.5 rounded border border-red-300" title="制御点を削除">
                                                                     -{pt.handles.length}曲
@@ -1531,7 +2093,7 @@
                                                                             handles[hid] = { ...handles[hid], x: fromMM(Number(e.target.value)) };
                                                                             newPts[idx] = { ...newPts[idx], handles };
                                                                             const newShapes = [...asset.shapes];
-                                                                            newShapes[selectedShapeIndex].points = newPts;
+                                                                            newShapes[targetIndex].points = newPts;
                                                                             setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
                                                                         }} className="flex-1 text-[9px] p-0.5 border rounded w-10 text-center" placeholder="X" />
                                                                         <input type="number" value={toMM(h.y)} onChange={e => {
@@ -1540,7 +2102,7 @@
                                                                             handles[hid] = { ...handles[hid], y: fromMM(Number(e.target.value)) };
                                                                             newPts[idx] = { ...newPts[idx], handles };
                                                                             const newShapes = [...asset.shapes];
-                                                                            newShapes[selectedShapeIndex].points = newPts;
+                                                                            newShapes[targetIndex].points = newPts;
                                                                             setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
                                                                         }} className="flex-1 text-[9px] p-0.5 border rounded w-10 text-center" placeholder="Y" />
                                                                     </div>
@@ -1555,7 +2117,7 @@
                                 )}
                             </div>
                         ) : (
-                            <div className="text-xs text-gray-400 p-2 text-center border rounded border-dashed">キャンバス上のパーツをクリックして編集</div>
+                            <div className="text-xs text-gray-400 p-2 text-center border rounded border-dashed">キャンバス上のパーツをクリックして編集<br />背景左ドラッグで範囲選択<br />Ctrl+クリックで複数選択</div>
                         )}
 
                         {/* Structure List */}
@@ -1570,9 +2132,21 @@
                             </div>
                             <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-thin">
                                 {(asset.shapes || []).map((s, i) => (
-                                    <div key={i} onClick={() => { setSelectedShapeIndex(i); setSelectedPointIndex(null); }} className={`flex justify-between items-center text-xs p-1 rounded border cursor-pointer ${selectedShapeIndex === i ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}>
+                                    <div key={i}
+                                        onClick={(e) => {
+                                            if (e.ctrlKey || e.metaKey) {
+                                                // トグル
+                                                if (selectedShapeIndices.includes(i)) setSelectedShapeIndices(prev => prev.filter(idx => idx !== i));
+                                                else setSelectedShapeIndices(prev => [...prev, i]);
+                                            } else {
+                                                setSelectedShapeIndices([i]);
+                                            }
+                                            setSelectedPointIndex(null);
+                                        }}
+                                        className={`flex justify-between items-center text-xs p-1 rounded border cursor-pointer ${selectedShapeIndices.includes(i) ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}
+                                    >
                                         <span className="font-bold text-gray-500">#{i + 1} {s.type}</span>
-                                        <button onClick={(e) => { e.stopPropagation(); if (!confirm('削除？')) return; const newShapes = asset.shapes.filter((_, idx) => idx !== i); setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a)); setSelectedShapeIndex(null); }} className="text-red-400 hover:text-red-600 px-1">×</button>
+                                        <button onClick={(e) => { e.stopPropagation(); if (!confirm('削除？')) return; const newShapes = asset.shapes.filter((_, idx) => idx !== i); setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a)); setSelectedShapeIndices(p => p.filter(idx => idx !== i)); }} className="text-red-400 hover:text-red-600 px-1">×</button>
                                     </div>
                                 ))}
                             </div>
@@ -1602,7 +2176,7 @@
 
             const [selectedIds, setSelectedIds] = useState([]);
             const [designTargetId, setDesignTargetId] = useState(null);
-            const [selectedShapeIndex, setSelectedShapeIndex] = useState(null);
+            const [selectedShapeIndices, setSelectedShapeIndices] = useState([]); // 複数選択対応
             const [selectedPointIndex, setSelectedPointIndex] = useState(null);
             const [colorPalette, setColorPalette] = useState([]);
 
@@ -1628,7 +2202,45 @@
                 API.getPalette().then(data => setColorPalette(data.colors || []));
             }, []);
 
-            // プロジェクトロード (グローバルアセットを自動フォーク)
+            // キーボードパン（WASD / 矢印キー）
+            useEffect(() => {
+                const PAN_STEP = 50;
+                const handleKeyDown = (e) => {
+                    // 入力フィールドにフォーカスがある場合は無視
+                    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+                    let dx = 0, dy = 0;
+                    switch (e.key.toLowerCase()) {
+                        case 'w': case 'arrowup': dy = PAN_STEP; break;
+                        case 's': case 'arrowdown': dy = -PAN_STEP; break;
+                        case 'a': case 'arrowleft': dx = PAN_STEP; break;
+                        case 'd': case 'arrowright': dx = -PAN_STEP; break;
+                        default: return;
+                    }
+                    e.preventDefault();
+                    setViewState(p => ({ ...p, x: p.x + dx, y: p.y + dy }));
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, []);
+
+            // 数値入力のホイール操作（Shift押下で10倍）
+            useEffect(() => {
+                const handleWheel = (e) => {
+                    if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
+                        e.preventDefault();
+                        const step = e.shiftKey ? 1000 : 10;
+                        const delta = e.deltaY < 0 ? step : -step;
+                        const currentValue = parseFloat(e.target.value) || 0;
+                        const newValue = currentValue + delta;
+                        e.target.value = newValue;
+                        e.target.dispatchEvent(new Event('input', { bubbles: true }));
+                        e.target.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                };
+                window.addEventListener('wheel', handleWheel, { passive: false });
+                return () => window.removeEventListener('wheel', handleWheel);
+            }, []);
             useEffect(() => {
                 if (!currentProjectId) return;
                 API.getProjectData(currentProjectId).then(data => {
@@ -2026,7 +2638,7 @@
                                 assets={allAssets}
                                 designTargetId={designTargetId} setLocalAssets={setLocalAssets}
                                 setGlobalAssets={setGlobalAssets}
-                                selectedShapeIndex={selectedShapeIndex} setSelectedShapeIndex={setSelectedShapeIndex}
+                                selectedShapeIndices={selectedShapeIndices} setSelectedShapeIndices={setSelectedShapeIndices}
                                 selectedPointIndex={selectedPointIndex} setSelectedPointIndex={setSelectedPointIndex}
                             />
                         )}
@@ -2044,7 +2656,7 @@
                             <DesignProperties
                                 assets={allAssets} designTargetId={designTargetId}
                                 setLocalAssets={setLocalAssets} setGlobalAssets={setGlobalAssets}
-                                selectedShapeIndex={selectedShapeIndex} setSelectedShapeIndex={setSelectedShapeIndex}
+                                selectedShapeIndices={selectedShapeIndices} setSelectedShapeIndices={setSelectedShapeIndices}
                                 selectedPointIndex={selectedPointIndex} setSelectedPointIndex={setSelectedPointIndex}
                                 setDesignTargetId={setDesignTargetId}
                                 palette={colorPalette} onAddToPalette={addToPalette}
