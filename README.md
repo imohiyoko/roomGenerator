@@ -1,11 +1,12 @@
 # roomGenerator (間取りアーキテクト Pro)
 
-間取り図（部屋のレイアウト）を生成・編集・管理するための Go ベースのアプリケーションです。
+間取り図（部屋のレイアウト）を生成・編集・管理するためのアプリケーションです。
+Wailsフレームワークを使用し、GoとReactで構築されています。
 
 ## 特徴
 
-- Go を使用したバックエンドサーバー
-- ブラウザベースの直感的な間取り編集 UI
+- デスクトップアプリケーションとして動作（Windows/Mac/Linux）
+- React + Vite によるモダンなフロントエンド開発環境
 - プロジェクトごとの保存・管理機能
 - カスタムアセット（家具、設備など）のサポート
 
@@ -13,42 +14,43 @@
 
 ### 必要条件
 
-- Go 1.24 以上
+- Go 1.21 以上
+- Node.js 16 以上
+- Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`)
 
 ### インストール
 
-1. リポジトリをクローンまたはダウンロードします。
+1. リポジトリをクローンします。
 2. 依存関係を整理します：
    ```bash
    go mod tidy
+   cd frontend
+   npm install
    ```
 
 ## 使い方
 
-### 開発・実行
+### 開発モード (ホットリロード対応)
 
-サーバーを起動し、ブラウザを自動的に開きます：
 ```bash
-go run main.go
+wails dev
 ```
-または `Makefile` を使用：
-```bash
-make run
-```
+フロントエンドの変更は即座に反映されます。
 
-### ビルド
+### ビルド (本番用)
 
-実行形式のファイルを生成します：
 ```bash
-make build
+wails build
 ```
+`build/bin` ディレクトリに実行ファイルが生成されます。
 
 ## プロジェクト構成
 
-- `main.go`: メインロジック、API サーバー、静的ファイルの提供
-- `public/`: フロントエンドの HTML, CSS, JS
+- `main.go`: アプリケーションのエントリーポイント
+- `app.go`: バックエンドロジック (API)
+- `frontend/`: フロントエンド (React + Vite)
+  - `src/`: ソースコード
 - `data/`: 保存されたプロジェクトデータ
-- `.github/workflows/`: CI/CD (GitHub Actions) 設定
 
 ## ライセンス
 
