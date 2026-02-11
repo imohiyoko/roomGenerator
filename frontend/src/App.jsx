@@ -98,21 +98,22 @@ const App = () => {
         }
         setView('project');
         API.getProjectData(currentProjectId).then(data => {
-            let loadedAssets = data?.LocalAssets || []; // Go struct field name is LocalAssets
+            let loadedAssets = data?.assets || [];
 
-            // グローバルアセットを自動的にローカルにフォーク
-            const localAssetNames = new Set(loadedAssets.map(a => a.name));
-            const forkedAssets = globalAssets
-                .filter(ga => !localAssetNames.has(ga.name))
-            .map(ga => {
-                const clone = deepClone(ga);
-                clone.id = `a-fork-${ga.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-                delete clone.source;
-                return clone;
-            });
+            // プロジェクトが空の場合のみ、グローバルアセットを初期ロード（自動フォーク）
+            if (loadedAssets.length === 0) {
+                const forkedAssets = globalAssets.map(ga => {
+                    const clone = deepClone(ga);
+                    clone.id = `a-fork-${ga.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                    delete clone.source;
+                    return clone;
+                });
+                setLocalAssets(forkedAssets);
+            } else {
+                setLocalAssets(loadedAssets);
+            }
 
-            setLocalAssets([...loadedAssets, ...forkedAssets]);
-            setInstances(data?.Instances || []);
+            setInstances(data?.instances || []);
         });
     }, [currentProjectId, globalAssets]);
 
