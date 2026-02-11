@@ -18,7 +18,7 @@ const DesignCanvasRender = ({ viewState, asset, shapes, selectedShapeIndices, se
                 {asset && (
                     <g>
                         {/* アセット全体のバウンディングボックス（点線）- 常に現在のシェイプに合わせて再計算されたサイズを表示 */}
-                        <rect x={asset.x * BASE_SCALE || 0} y={asset.y * BASE_SCALE || 0} width={asset.w * BASE_SCALE} height={asset.h * BASE_SCALE} fill="none" stroke="blue" strokeWidth="1" strokeDasharray="4 2" opacity="0.3" pointerEvents="none" />
+                        <rect x={asset.boundX * BASE_SCALE || 0} y={asset.boundY * BASE_SCALE || 0} width={asset.w * BASE_SCALE} height={asset.h * BASE_SCALE} fill="none" stroke="blue" strokeWidth="1" strokeDasharray="4 2" opacity="0.3" pointerEvents="none" />
 
                         {shapes.map((s, i) => {
                             const isSelected = selectedShapeIndices.includes(i);
@@ -247,16 +247,16 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         if (hasPoints && minX !== Infinity) {
             const w = Math.round(maxX - minX);
             const h = Math.round(maxY - minY);
-            const x = Math.round(minX);
-            const y = Math.round(minY);
+            const bx = Math.round(minX);
+            const by = Math.round(minY);
 
             // 変更がある場合のみ更新 (無限ループ防止)
-            if (asset.w !== w || asset.h !== h || asset.x !== x || asset.y !== y) {
+            if (asset.w !== w || asset.h !== h || asset.boundX !== bx || asset.boundY !== by) {
                 // setTimeoutで更新を遅延させないとレンダリングサイクルと競合する可能性あり
                 // ただし、頻繁な更新は重くなるので、drag中は更新しないほうが良いかもしれない
                 // ここではシンプルに更新するが、パフォーマンス問題が出る場合はdragRef.current.mode === 'idle'のチェックを入れる
                 if (dragRef.current.mode === 'idle') {
-                     setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, x, y, w, h } : a));
+                     setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, boundX: bx, boundY: by, w, h } : a));
                 }
             }
         }
@@ -443,237 +443,6 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         setSelectedPointIndex(null);
     };
 
-    const handleMove = (e) => {
-        const mode = dragRef.current.mode;
-        if (mode === 'idle') return;
-        e.preventDefault();
-
-        if (mode === 'panning') {
-            const dx = e.clientX - dragRef.current.sx;
-            const dy = e.clientY - dragRef.current.sy;
-            setViewState(p => ({ ...p, x: dragRef.current.vx + dx, y: dragRef.current.vy + dy }));
-        } else if (mode === 'marquee') {
-            // マーキー矩形更新
-            setMarquee(prev => prev ? { ...prev, ex: e.clientX, ey: e.clientY } : null);
-
-            // マーキー選択処理
-            if (svgRef.current) {
-                const rect = svgRef.current.getBoundingClientRect();
-                const scale = viewState.scale * BASE_SCALE;
-                const toWorld = (screenX, screenY) => ({
-                    x: (screenX - rect.left - viewState.x) / scale,
-                    y: (screenY - rect.top - viewState.y) / scale
-                });
-
-                const p1 = toWorld(dragRef.current.sx, dragRef.current.sy);
-                const p2 = toWorld(e.clientX, e.clientY);
-                const minX = Math.min(p1.x, p2.x);
-                const maxX = Math.max(p1.x, p2.x);
-                const minY = Math.min(p1.y, p2.y);
-                const maxY = Math.max(p1.y, p2.y);
-
-                const inBoxIndices = asset.shapes.map((s, i) => {
-                    // バウンディングボックスで判定
-                    const sx = s.x || 0;
-                    const sy = s.y || 0;
-                    const sw = s.w || 0;
-                    const sh = s.h || 0;
-                    // シェイプの中心または範囲が交差するか？ここでは中心判定
-                    let cx, cy;
-                    if (s.type === 'polygon' && s.points) {
-                        const xs = s.points.map(p => p.x);
-                        const ys = s.points.map(p => p.y);
-                        const minPx = Math.min(...xs);
-                        const maxPx = Math.max(...xs);
-                        const minPy = Math.min(...ys);
-                        const maxPy = Math.max(...ys);
-                        cx = minPx + (maxPx - minPx) / 2;
-                        cy = minPy + (maxPy - minPy) / 2;
-                    } else if (s.type === 'ellipse' || s.type === 'arc' || s.type === 'circle') {
-                        cx = s.cx !== undefined ? s.cx : (s.x + s.w / 2);
-                        cy = s.cy !== undefined ? s.cy : (s.y + s.h / 2);
-                    } else {
-                        cx = (s.x || 0) + (s.w || 0) / 2;
-                        cy = (s.y || 0) + (s.h || 0) / 2;
-                    }
-                    return (cx >= minX && cx <= maxX && cy >= minY && cy <= maxY) ? i : -1;
-                }).filter(i => i !== -1);
-
-                // Ctrl押してる場合は追加選択
-                const initialSelected = dragRef.current.prevSelectedIndices || [];
-                const newIndices = [...new Set([...initialSelected, ...inBoxIndices])];
-                setSelectedShapeIndices(newIndices);
-            }
-        } else if (mode === 'resizing' && selectedShapeIndices.length > 0) {
-            const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
-            const dy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
-            const newShapes = [...asset.shapes];
-            const targetIdx = selectedShapeIndices[0]; // Resizeは単一
-            const targetShape = newShapes[targetIdx];
-            const resizeMode = dragRef.current.resizeMode;
-
-            if (resizeMode === 'both') {
-                const aspect = dragRef.current.shapeW / dragRef.current.shapeH;
-                let newW = dragRef.current.shapeW + dx;
-                let newH = dragRef.current.shapeH + dy;
-                if (!e.shiftKey) {
-                    newW = Math.round(newW / SNAP_UNIT) * SNAP_UNIT;
-                    newH = Math.round(newH / SNAP_UNIT) * SNAP_UNIT;
-                }
-                newW = Math.max(10, newW);
-                newH = Math.max(10, newH);
-                newShapes[targetIdx] = { ...targetShape, w: newW, h: newH };
-            } else if (resizeMode === 'width') {
-                let newW = dragRef.current.shapeW + dx;
-                if (!e.shiftKey) newW = Math.round(newW / SNAP_UNIT) * SNAP_UNIT;
-                newW = Math.max(10, newW);
-                newShapes[targetIdx] = { ...targetShape, w: newW };
-            } else if (resizeMode === 'height') {
-                let newH = dragRef.current.shapeH + dy;
-                if (!e.shiftKey) newH = Math.round(newH / SNAP_UNIT) * SNAP_UNIT;
-                newH = Math.max(10, newH);
-                newShapes[targetIdx] = { ...targetShape, h: newH };
-            }
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
-        } else if (mode === 'draggingShape') {
-            const rawDx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
-            const rawDy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
-
-            let moveX = rawDx;
-            let moveY = rawDy;
-
-            // スナップ計算
-            if (asset.snap && !e.shiftKey) {
-                const anchorX = dragRef.current.anchorX || 0;
-                const anchorY = dragRef.current.anchorY || 0;
-                const targetX = anchorX + rawDx;
-                const targetY = anchorY + rawDy;
-                const snappedX = Math.round(targetX / SNAP_UNIT) * SNAP_UNIT;
-                const snappedY = Math.round(targetY / SNAP_UNIT) * SNAP_UNIT;
-                moveX = snappedX - anchorX;
-                moveY = snappedY - anchorY;
-            }
-
-            const newShapes = [...asset.shapes];
-            const initialShapes = dragRef.current.initialShapes || [];
-
-            initialShapes.forEach(({ index, data }) => {
-                let updatedShape = { ...newShapes[index] };
-
-                // 座標移動
-                if (data.x !== undefined) updatedShape.x = (data.x || 0) + moveX;
-                if (data.y !== undefined) updatedShape.y = (data.y || 0) + moveY;
-                if (data.cx !== undefined) updatedShape.cx = (data.cx || 0) + moveX;
-                if (data.cy !== undefined) updatedShape.cy = (data.cy || 0) + moveY;
-
-                // Points移動
-                if (data.points) {
-                    updatedShape.points = data.points.map(p => ({ ...p, x: p.x + moveX, y: p.y + moveY }));
-                }
-
-                newShapes[index] = updatedShape;
-            });
-
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
-
-        } else if (mode === 'draggingPoint' && selectedShapeIndices.length > 0 && selectedPointIndex !== null) {
-            const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
-            const dy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
-            const newShapes = [...asset.shapes];
-            const targetIdx = selectedShapeIndices[0];
-
-            const pts = [...newShapes[targetIdx].points];
-            let nx = dragRef.current.pointX + dx;
-            let ny = dragRef.current.pointY + dy;
-            if (!e.shiftKey) {
-                nx = Math.round(nx / SNAP_UNIT) * SNAP_UNIT;
-                ny = Math.round(ny / SNAP_UNIT) * SNAP_UNIT;
-            }
-
-            pts[selectedPointIndex] = { ...pts[selectedPointIndex], x: nx, y: ny };
-            newShapes[targetIdx].points = pts;
-
-            // x, y, w, h の再計算 (Polygon用)
-            if (newShapes[targetIdx].type === 'polygon') {
-                const xs = pts.map(p => p.x);
-                const ys = pts.map(p => p.y);
-                newShapes[targetIdx].x = Math.min(...xs);
-                newShapes[targetIdx].y = Math.min(...ys);
-                newShapes[targetIdx].w = Math.max(...xs) - newShapes[targetIdx].x;
-                newShapes[targetIdx].h = Math.max(...ys) - newShapes[targetIdx].y;
-            }
-
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
-
-        } else if (mode === 'draggingHandle' && selectedShapeIndices.length > 0 && selectedPointIndex !== null) {
-            const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
-            const dy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
-            const newShapes = [...asset.shapes];
-            const targetIdx = selectedShapeIndices[0];
-
-            const pts = [...newShapes[targetIdx].points];
-            const pt = { ...pts[selectedPointIndex] };
-            const handles = [...pt.handles];
-            const hIndex = dragRef.current.handleIndex;
-
-            handles[hIndex] = {
-                x: dragRef.current.handleX + dx,
-                y: dragRef.current.handleY + dy
-            };
-            pt.handles = handles;
-            pts[selectedPointIndex] = pt;
-            newShapes[targetIdx].points = pts;
-
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
-
-        } else if (mode === 'draggingAngle' && selectedShapeIndices.length > 0) {
-            const targetIdx = selectedShapeIndices[0];
-            const rect = svgRef.current.getBoundingClientRect();
-            const cx = dragRef.current.cx; // screen coord
-            const cy = dragRef.current.cy;
-            const angle = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
-            const deg = (angle + 360) % 360; // 0-360
-
-            const newShapes = [...asset.shapes];
-            // 15度スナップ (Shiftを押していない時)
-            const snapped = e.shiftKey ? deg : Math.round(deg / 15) * 15;
-            newShapes[targetIdx][dragRef.current.targetProp] = snapped;
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
-
-        } else if (mode === 'draggingRotation' && selectedShapeIndices.length > 0) {
-            const targetIdx = selectedShapeIndices[0];
-            const cx = dragRef.current.cx;
-            const cy = dragRef.current.cy;
-            const currentAngle = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
-            const delta = currentAngle - dragRef.current.startAngle;
-            let newRot = (dragRef.current.initialRotation + delta + 360) % 360;
-
-            // 15度スナップ (Shiftを押していない時)
-            if (!e.shiftKey) {
-                newRot = Math.round(newRot / 15) * 15;
-            }
-
-            const newShapes = [...asset.shapes];
-            newShapes[targetIdx].rotation = newRot;
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
-
-        } else if (mode === 'draggingRadius' && selectedShapeIndices.length > 0) {
-            const targetIdx = selectedShapeIndices[0];
-            const newShapes = [...asset.shapes];
-            const scale = viewState.scale * BASE_SCALE;
-
-            const dx = (e.clientX - dragRef.current.sx) / scale;
-            let newVal = dragRef.current.initialVal + dx;
-            if (!e.shiftKey) {
-                newVal = Math.round(newVal / SNAP_UNIT) * SNAP_UNIT;
-            }
-            newVal = Math.max(1, newVal);
-
-            newShapes[targetIdx][dragRef.current.targetProp] = newVal;
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
-        }
-    };
-
     const handleUp = () => {
         setMarquee(null);
         setCursorMode('idle');
@@ -720,10 +489,10 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             if (hasPoints && minX !== Infinity) {
                 const w = Math.round(maxX - minX);
                 const h = Math.round(maxY - minY);
-                const x = Math.round(minX);
-                const y = Math.round(minY);
-                if (asset.w !== w || asset.h !== h || asset.x !== x || asset.y !== y) {
-                    setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, x, y, w, h } : a));
+                const bx = Math.round(minX);
+                const by = Math.round(minY);
+                if (asset.w !== w || asset.h !== h || asset.boundX !== bx || asset.boundY !== by) {
+                    setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, boundX: bx, boundY: by, w, h } : a));
                 }
             }
         }
