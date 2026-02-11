@@ -1,7 +1,7 @@
 import React from 'react';
 import { Icon, Icons } from './Icon';
 import { ColorPicker } from './ColorPicker';
-import { fromMM, toMM, createRectPath, createTrianglePath } from '../lib/utils';
+import { fromMM, toMM, createRectPath, createTrianglePath, deepClone } from '../lib/utils';
 
 export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, selectedShapeIndices, setSelectedShapeIndices, selectedPointIndex, setSelectedPointIndex, setDesignTargetId, palette, onAddToPalette }) => {
     const asset = assets.find(a => a.id === designTargetId);
@@ -165,7 +165,10 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
 
     const fork = () => {
         const newId = `a-fork-${Date.now()}`;
-        const newA = { ...asset, id: newId, name: asset.name + ' (コピー)', source: undefined };
+        const newA = deepClone(asset);
+        newA.id = newId;
+        newA.name = asset.name + ' (コピー)';
+        delete newA.source;
         setLocalAssets(prev => [...prev, newA]);
         if (setDesignTargetId) setDesignTargetId(newId);
     };

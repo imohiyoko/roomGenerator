@@ -3,6 +3,11 @@ import { BASE_SCALE } from './constants';
 export const toMM = (val) => Math.round(val * 10);
 export const fromMM = (val) => val / 10;
 
+export const deepClone = (obj) => {
+    if (obj === null || typeof obj !== 'object') return obj;
+    return JSON.parse(JSON.stringify(obj));
+};
+
 export const createRectPath = (w, h, x = 0, y = 0) => [
     { x: x, y: y, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false },
     { x: x + w, y: y, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false },

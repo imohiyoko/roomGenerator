@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { API } from './lib/api';
 import { BASE_SCALE } from './lib/constants';
+import { deepClone } from './lib/utils';
 import { Icon, Icons } from './components/Icon';
 import { UnifiedSidebar } from './components/UnifiedSidebar';
 import { LayoutCanvas } from './components/LayoutCanvas';
@@ -103,7 +104,12 @@ const App = () => {
             const localAssetNames = new Set(loadedAssets.map(a => a.name));
             const forkedAssets = globalAssets
                 .filter(ga => !localAssetNames.has(ga.name))
-                .map(ga => ({ ...ga, id: `a-fork-${ga.id}-${Date.now()}`, source: undefined }));
+            .map(ga => {
+                const clone = deepClone(ga);
+                clone.id = `a-fork-${ga.id}-${Date.now()}`;
+                delete clone.source;
+                return clone;
+            });
 
             setLocalAssets([...loadedAssets, ...forkedAssets]);
             setInstances(data?.Instances || []);
@@ -151,7 +157,10 @@ const App = () => {
         // グローバルアセットの場合、自動的にローカルコピーを作成
         if (asset && asset.source === 'global') {
             const newLocalId = `a-fork-${Date.now()}`;
-            const newLocalAsset = { ...asset, id: newLocalId, name: asset.name, source: undefined };
+            const newLocalAsset = deepClone(asset);
+            newLocalAsset.id = newLocalId;
+            newLocalAsset.name = asset.name;
+            delete newLocalAsset.source;
             setLocalAssets(prev => [...prev, newLocalAsset]);
             targetAssetId = newLocalId;
             asset = newLocalAsset;
