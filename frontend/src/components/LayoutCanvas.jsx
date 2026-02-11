@@ -18,18 +18,25 @@ const RenderItem = ({ item, isSelected, onDown }) => (
         ) : (
             <g>
                 <RenderAssetShapes item={item} isSelected={isSelected} />
-                {isSelected && <g className="pointer-events-none">
-                    {/* 位置表示 (原点からの距離) */}
-                    <text x={-15} y={-15} textAnchor="end" fontSize="9" fill="#666" fontWeight="bold">({toMM(item.x)}, {toMM(item.y)})</text>
-                    {/* サイズ表示 */}
-                    <line x1={0} y1={-10} x2={item.w * BASE_SCALE} y2={-10} stroke="blue" strokeWidth="1" />
-                    <text x={item.w * BASE_SCALE / 2} y={-12} textAnchor="middle" fontSize="10" fill="blue">{toMM(item.w)}mm</text>
-                    <line x1={-10} y1={0} x2={-10} y2={item.h * BASE_SCALE} stroke="blue" strokeWidth="1" />
-                    <text x={-12} y={item.h * BASE_SCALE / 2} textAnchor="end" dominantBaseline="middle" fontSize="10" fill="blue">{toMM(item.h)}mm</text>
-                    {/* 選択ハイライト */}
-                    <rect x={-2} y={-2} width={item.w * BASE_SCALE + 4} height={item.h * BASE_SCALE + 4} fill="none" stroke="#3b82f6" strokeWidth="2" strokeDasharray="6 3" />
-                </g>}
-                <text x={item.w * BASE_SCALE / 2} y={item.h * BASE_SCALE / 2} textAnchor="middle" dominantBaseline="middle" fontSize={12} fill="#333" pointerEvents="none" style={{ userSelect: 'none', textShadow: '0 0 2px white' }}>{item.name}</text>
+                {isSelected && (() => {
+                    // Selection box offset by boundX/boundY if present, otherwise 0
+                    const bx = (item.boundX || 0) * BASE_SCALE;
+                    const by = (item.boundY || 0) * BASE_SCALE;
+                    return (
+                        <g className="pointer-events-none">
+                            {/* 位置表示 (原点からの距離) */}
+                            <text x={bx - 15} y={by - 15} textAnchor="end" fontSize="9" fill="#666" fontWeight="bold">({toMM(item.x)}, {toMM(item.y)})</text>
+                            {/* サイズ表示 */}
+                            <line x1={bx} y1={by - 10} x2={bx + item.w * BASE_SCALE} y2={by - 10} stroke="blue" strokeWidth="1" />
+                            <text x={bx + item.w * BASE_SCALE / 2} y={by - 12} textAnchor="middle" fontSize="10" fill="blue">{toMM(item.w)}mm</text>
+                            <line x1={bx - 10} y1={by} x2={bx - 10} y2={by + item.h * BASE_SCALE} stroke="blue" strokeWidth="1" />
+                            <text x={bx - 12} y={by + item.h * BASE_SCALE / 2} textAnchor="end" dominantBaseline="middle" fontSize="10" fill="blue">{toMM(item.h)}mm</text>
+                            {/* 選択ハイライト */}
+                            <rect x={bx - 2} y={by - 2} width={item.w * BASE_SCALE + 4} height={item.h * BASE_SCALE + 4} fill="none" stroke="#3b82f6" strokeWidth="2" strokeDasharray="6 3" />
+                        </g>
+                    );
+                })()}
+                <text x={(item.boundX || 0) * BASE_SCALE + item.w * BASE_SCALE / 2} y={(item.boundY || 0) * BASE_SCALE + item.h * BASE_SCALE / 2} textAnchor="middle" dominantBaseline="middle" fontSize={12} fill="#333" pointerEvents="none" style={{ userSelect: 'none', textShadow: '0 0 2px white' }}>{item.name}</text>
             </g>
         )}
     </g>
