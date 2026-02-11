@@ -1,19 +1,7 @@
-.PHONY: build run test clean tidy
+.PHONY: dev build
 
-BINARY_NAME=roomGenerator.exe
+dev:
+	wails dev
 
 build:
-	go build -o $(BINARY_NAME) main.go
-
-run:
-	go run main.go
-
-test:
-	go test ./...
-
-tidy:
-	go mod tidy
-
-clean:
-	rm -f $(BINARY_NAME)
-	rm -f app.log
+	wails build

@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbars if needed */
+.scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 3px;
+}
+
+.canvas-scroll::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+.canvas-scroll::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 6px;
+}
+.canvas-scroll::-webkit-scrollbar-thumb {
+    background-color: #94a3b8;
+    border-radius: 6px;
+    border: 2px solid #f1f5f9;
+}
+.canvas-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: #64748b;
+}
+.canvas-scroll::-webkit-scrollbar-corner {
+    background: #f1f5f9;
+}
+
+/* Grid backgrounds */
+.grid-bg {
+    background-color: #f8fafc;
+    background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+    background-size: 40px 40px;
+}
+
+.design-grid {
+    background-color: #fff7ed;
+    background-image:
+        linear-gradient(to right, #fed7aa 1px, transparent 1px),
+        linear-gradient(to bottom, #fed7aa 1px, transparent 1px);
+    background-size: 20px 20px;
+}

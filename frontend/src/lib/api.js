@@ -1,0 +1,12 @@
+export const API = {
+    getAssets: () => window.go?.main?.App?.GetAssets() ?? Promise.resolve([]),
+    saveAssets: (d) => window.go?.main?.App?.SaveAssets(d),
+    getPalette: () => window.go?.main?.App?.GetPalette() ?? Promise.resolve({colors:[]}),
+    savePalette: (d) => window.go?.main?.App?.SavePalette(d),
+    getProjects: () => window.go?.main?.App?.GetProjects() ?? Promise.resolve([]),
+    createProject: (name) => window.go?.main?.App?.CreateProject(name),
+    getProjectData: (id) => window.go?.main?.App?.GetProjectData(id),
+    saveProjectData: (id, d) => window.go?.main?.App?.SaveProjectData(id, d),
+    deleteProject: (id) => window.go?.main?.App?.DeleteProject(id),
+    updateProjectName: (id, name) => window.go?.main?.App?.UpdateProjectName(id, name),
+};
