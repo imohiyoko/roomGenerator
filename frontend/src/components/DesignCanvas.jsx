@@ -535,7 +535,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
                 newH = Math.max(10, newH);
                 newShapes[targetIdx] = { ...targetShape, h: newH };
             }
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
         } else if (mode === 'draggingShape') {
             const rawDx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
             const rawDy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
@@ -575,7 +575,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
                 newShapes[index] = updatedShape;
             });
 
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
 
         } else if (mode === 'draggingPoint' && selectedShapeIndices.length > 0 && selectedPointIndex !== null) {
             const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
@@ -604,7 +604,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
                 newShapes[targetIdx].h = Math.max(...ys) - newShapes[targetIdx].y;
             }
 
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
 
         } else if (mode === 'draggingHandle' && selectedShapeIndices.length > 0 && selectedPointIndex !== null) {
             const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
@@ -625,7 +625,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             pts[selectedPointIndex] = pt;
             newShapes[targetIdx].points = pts;
 
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
 
         } else if (mode === 'draggingAngle' && selectedShapeIndices.length > 0) {
             const targetIdx = selectedShapeIndices[0];
@@ -639,7 +639,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             // 15度スナップ (Shiftを押していない時)
             const snapped = e.shiftKey ? deg : Math.round(deg / 15) * 15;
             newShapes[targetIdx][dragRef.current.targetProp] = snapped;
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
 
         } else if (mode === 'draggingRotation' && selectedShapeIndices.length > 0) {
             const targetIdx = selectedShapeIndices[0];
@@ -656,7 +656,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
 
             const newShapes = [...asset.shapes];
             newShapes[targetIdx].rotation = newRot;
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
 
         } else if (mode === 'draggingRadius' && selectedShapeIndices.length > 0) {
             const targetIdx = selectedShapeIndices[0];
@@ -671,7 +671,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             newVal = Math.max(1, newVal);
 
             newShapes[targetIdx][dragRef.current.targetProp] = newVal;
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
         }
     };
 
@@ -733,7 +733,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
     const handleDeleteShape = (index) => {
         if (!confirm('このシェイプを削除しますか？')) return;
         const newShapes = asset.shapes.filter((_, i) => i !== index);
-        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
         setSelectedShapeIndices([]);
     };
 

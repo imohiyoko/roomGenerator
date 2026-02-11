@@ -2,20 +2,22 @@ import React from 'react';
 import { Icon, Icons } from './Icon';
 import { createRectPath } from '../lib/utils';
 
-export const UnifiedSidebar = ({ mode, assets, onAddInstance, onAddText, setLocalAssets, setGlobalAssets, setDesignTargetId, designTargetId, instances, setInstances }) => {
+export const UnifiedSidebar = ({ mode, assets, onAddInstance, onAddText, setLocalAssets, setGlobalAssets, setDesignTargetId, designTargetId, instances, setInstances, defaultColors }) => {
     // 常にローカルアセットのみ表示（globalはプロジェクト読込時に自動フォーク済み）
     const filteredAssets = assets.filter(a => !a.source || a.source !== 'global');
 
     // 新規作成 (Design Mode用)
     const addNewAsset = () => {
+        const defaultColor = (defaultColors && defaultColors.room) ? defaultColors.room : '#cccccc';
         const initialShape = {
             type: 'polygon',
             points: createRectPath(60, 60, 0, 0),
-            color: '#cccccc'
+            color: defaultColor
         };
         const newA = {
             id: `a-${Date.now()}`, name: '新規パーツ', type: 'room',
-            w: 60, h: 60, color: '#cccccc', snap: true,
+            w: 60, h: 60, color: defaultColor, snap: true,
+            isDefaultShape: true, // デフォルト形状フラグ
             shapes: [initialShape]
         };
         setLocalAssets(prev => [...prev, newA]);

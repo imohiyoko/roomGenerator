@@ -3,7 +3,7 @@ import { Icon, Icons } from './Icon';
 import { ColorPicker } from './ColorPicker';
 import { fromMM, toMM, createRectPath, createTrianglePath, deepClone } from '../lib/utils';
 
-export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, selectedShapeIndices, setSelectedShapeIndices, selectedPointIndex, setSelectedPointIndex, setDesignTargetId, palette, onAddToPalette }) => {
+export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, selectedShapeIndices, setSelectedShapeIndices, selectedPointIndex, setSelectedPointIndex, setDesignTargetId, palette, onAddToPalette, defaultColors }) => {
     const asset = assets.find(a => a.id === designTargetId);
 
     // 未選択時
@@ -21,14 +21,33 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
     const selectedShape = (asset.shapes && targetIndex !== null) ? asset.shapes[targetIndex] : null;
     const selectedPoint = (selectedShape && selectedShape.points && selectedPointIndex !== null) ? selectedShape.points[selectedPointIndex] : null;
 
-    const updateRoot = (k, v) => { if (asset.source === 'global') return; setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, [k]: v } : a)); };
+    const updateRoot = (k, v) => {
+        if (asset.source === 'global') return;
+        setLocalAssets(p => p.map(a => {
+            if (a.id !== designTargetId) return a;
+            let updates = { [k]: v };
+
+            // 種類変更時にデフォルト形状なら色も更新
+            if (k === 'type' && a.isDefaultShape && defaultColors && defaultColors[v]) {
+                const newColor = defaultColors[v];
+                updates.color = newColor;
+                updates.shapes = (a.shapes || []).map(s => ({ ...s, color: newColor }));
+            }
+            // 色を手動変更したらデフォルト形状フラグを下ろす
+            if (k === 'color') {
+                updates.isDefaultShape = false;
+            }
+            return { ...a, ...updates };
+        }));
+    };
 
     // 単一選択用更新関数
     const updateShape = (k, v) => {
         if (asset.source === 'global' || targetIndex === null) return;
         const currentShapes = asset.shapes || [];
         const newShapes = currentShapes.map((s, i) => i === targetIndex ? { ...s, [k]: v } : s);
-        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+        // 形状変更時はデフォルト形状フラグを下ろす
+        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
     };
     const updatePoint = (k, v) => {
         if (asset.source === 'global' || targetIndex === null || selectedPointIndex === null) return;
@@ -37,7 +56,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
         const newPt = { ...newPts[selectedPointIndex], [k]: v };
         newPts[selectedPointIndex] = newPt;
         newShapes[targetIndex].points = newPts;
-        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
     };
 
     // 一括操作用関数
@@ -48,7 +67,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
             }
             return s;
         });
-        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
     };
 
     const bulkMove = (dx, dy) => {
@@ -64,7 +83,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
     const bulkDelete = () => {
         if (!confirm(`${selectedShapeIndices.length}個のシェイプを削除しますか？`)) return;
         const newShapes = asset.shapes.filter((_, i) => !selectedShapeIndices.includes(i));
-        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
         setSelectedShapeIndices([]);
     };
 
@@ -197,7 +216,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
             if (s.points) s.points.forEach(p => { maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); });
             else { maxX = Math.max(maxX, (s.x || 0) + s.w); maxY = Math.max(maxY, (s.y || 0) + s.h); }
         });
-        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, w: maxX, h: maxY } : a));
+        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, w: maxX, h: maxY, isDefaultShape: false } : a));
     };
 
     if (asset.source === 'global') return (
@@ -299,7 +318,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                 const newPts = selectedShape.points.filter((_, i) => i !== selectedPointIndex);
                                 const newShapes = [...asset.shapes];
                                 newShapes[targetIndex].points = newPts;
-                                setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                                setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
                                 setSelectedPointIndex(null);
                             }} className="w-full py-1.5 text-xs bg-red-50 border border-red-200 text-red-600 rounded hover:bg-red-100 font-bold">この頂点を削除</button>
                         </div>
@@ -357,21 +376,21 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                                         newPts[idx] = { ...newPts[idx], x: fromMM(Number(e.target.value)) };
                                                         const newShapes = [...asset.shapes];
                                                         newShapes[targetIndex].points = newPts;
-                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
                                                     }} className="flex-1 text-[10px] p-0.5 border rounded w-12 text-center" placeholder="X" />
                                                     <input type="number" value={toMM(pt.y)} onChange={e => {
                                                         const newPts = [...selectedShape.points];
                                                         newPts[idx] = { ...newPts[idx], y: fromMM(Number(e.target.value)) };
                                                         const newShapes = [...asset.shapes];
                                                         newShapes[targetIndex].points = newPts;
-                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
                                                     }} className="flex-1 text-[10px] p-0.5 border rounded w-12 text-center" placeholder="Y" />
                                                     <button onClick={() => {
                                                         if (selectedShape.points.length <= 3) { alert('最低3点必要です'); return; }
                                                         const newPts = selectedShape.points.filter((_, i) => i !== idx);
                                                         const newShapes = [...asset.shapes];
                                                         newShapes[targetIndex].points = newPts;
-                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
                                                         if (selectedPointIndex === idx) setSelectedPointIndex(null);
                                                     }} className="text-[10px] text-red-400 hover:text-red-600 p-0.5" title="削除">×</button>
                                                 </div>
@@ -387,7 +406,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                                         const newPts = [...selectedShape.points.slice(0, idx + 1), newPt, ...selectedShape.points.slice(idx + 1)];
                                                         const newShapes = [...asset.shapes];
                                                         newShapes[targetIndex].points = newPts;
-                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
                                                     }} className="text-[9px] text-green-600 hover:bg-green-100 px-1.5 py-0.5 rounded border border-green-300" title="頂点を追加">
                                                         +頂点
                                                     </button>
@@ -404,7 +423,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                                             newPts[idx] = { ...newPts[idx], handles: [...handles, { x: midX, y: midY }] };
                                                             const newShapes = [...asset.shapes];
                                                             newShapes[targetIndex].points = newPts;
-                                                            setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                                                            setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
                                                         }} className="text-[9px] text-blue-600 hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-300" title="曲線制御点を追加">
                                                             +曲線{pt.handles?.length === 1 ? '2' : ''}
                                                         </button>
@@ -417,7 +436,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                                             newPts[idx] = { ...newPts[idx], handles };
                                                             const newShapes = [...asset.shapes];
                                                             newShapes[targetIndex].points = newPts;
-                                                            setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                                                            setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
                                                         }} className="text-[9px] text-red-500 hover:bg-red-100 px-1 py-0.5 rounded border border-red-300" title="制御点を削除">
                                                             -{pt.handles.length}曲
                                                         </button>
@@ -436,7 +455,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                                                     newPts[idx] = { ...newPts[idx], handles };
                                                                     const newShapes = [...asset.shapes];
                                                                     newShapes[targetIndex].points = newPts;
-                                                                    setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                                                                    setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
                                                                 }} className="flex-1 text-[9px] p-0.5 border rounded w-10 text-center" placeholder="X" />
                                                                 <input type="number" value={toMM(h.y)} onChange={e => {
                                                                     const newPts = [...selectedShape.points];
@@ -445,7 +464,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                                                     newPts[idx] = { ...newPts[idx], handles };
                                                                     const newShapes = [...asset.shapes];
                                                                     newShapes[targetIndex].points = newPts;
-                                                                    setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a));
+                                                                    setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
                                                                 }} className="flex-1 text-[9px] p-0.5 border rounded w-10 text-center" placeholder="Y" />
                                                             </div>
                                                         ))}
@@ -467,9 +486,9 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                     <div className="flex justify-between items-center mb-2">
                         <label className="text-xs font-bold text-gray-500">構成要素</label>
                         <div className="flex gap-1">
-                            <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: [...(a.shapes || []), { type: 'polygon', points: createRectPath(40, 40, 0, 0), color: asset.color }] } : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">□</button>
-                            <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: [...(a.shapes || []), { type: 'polygon', points: createTrianglePath(40, 40, 0, 0), color: asset.color }] } : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">▽</button>
-                            <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: [...(a.shapes || []), { type: 'ellipse', cx: 30, cy: 30, rx: 30, ry: 30, startAngle: 0, endAngle: 360, arcMode: 'sector', color: asset.color }] } : a))} className="px-1.5 py-0.5 bg-green-100 rounded hover:bg-green-200 text-[10px]" title="楕円/扇形">◔</button>
+                            <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: [...(a.shapes || []), { type: 'polygon', points: createRectPath(40, 40, 0, 0), color: asset.color }], isDefaultShape: false } : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">□</button>
+                            <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: [...(a.shapes || []), { type: 'polygon', points: createTrianglePath(40, 40, 0, 0), color: asset.color }], isDefaultShape: false } : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">▽</button>
+                            <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: [...(a.shapes || []), { type: 'ellipse', cx: 30, cy: 30, rx: 30, ry: 30, startAngle: 0, endAngle: 360, arcMode: 'sector', color: asset.color }], isDefaultShape: false } : a))} className="px-1.5 py-0.5 bg-green-100 rounded hover:bg-green-200 text-[10px]" title="楕円/扇形">◔</button>
                         </div>
                     </div>
                     <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-thin">
@@ -488,7 +507,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                 className={`flex justify-between items-center text-xs p-1 rounded border cursor-pointer ${selectedShapeIndices.includes(i) ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}
                             >
                                 <span className="font-bold text-gray-500">#{i + 1} {s.type}</span>
-                                <button onClick={(e) => { e.stopPropagation(); if (!confirm('削除？')) return; const newShapes = asset.shapes.filter((_, idx) => idx !== i); setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes } : a)); setSelectedShapeIndices(p => p.filter(idx => idx !== i)); }} className="text-red-400 hover:text-red-600 px-1">×</button>
+                                <button onClick={(e) => { e.stopPropagation(); if (!confirm('削除？')) return; const newShapes = asset.shapes.filter((_, idx) => idx !== i); setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a)); setSelectedShapeIndices(p => p.filter(idx => idx !== i)); }} className="text-red-400 hover:text-red-600 px-1">×</button>
                             </div>
                         ))}
                     </div>

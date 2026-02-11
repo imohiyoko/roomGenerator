@@ -27,14 +27,34 @@ const App = () => {
     const [selectedShapeIndices, setSelectedShapeIndices] = useState([]);
     const [selectedPointIndex, setSelectedPointIndex] = useState(null);
     const [colorPalette, setColorPalette] = useState([]);
+    const [defaultColors, setDefaultColors] = useState({ room: '#fdfcdc', furniture: '#8fbc8f', fixture: '#cccccc' });
 
     // パレットに色を追加
     const addToPalette = (color) => {
         if (!colorPalette.includes(color)) {
             const newPalette = [...colorPalette, color];
             setColorPalette(newPalette);
-            API.savePalette({ colors: newPalette });
+            API.savePalette({ colors: newPalette, defaults: defaultColors });
         }
+    };
+
+    // デフォルト色を更新
+    const handleUpdateDefaultColor = (type, color) => {
+        const newDefaults = { ...defaultColors, [type]: color };
+        setDefaultColors(newDefaults);
+        API.savePalette({ colors: colorPalette, defaults: newDefaults });
+
+        // isDefaultShape: true のアセットを一括更新
+        const updateAssets = (assets) => assets.map(a => {
+            if (a.isDefaultShape && a.type === type) {
+                const newShapes = (a.shapes || []).map(s => ({ ...s, color: color }));
+                return { ...a, color: color, shapes: newShapes };
+            }
+            return a;
+        });
+
+        setLocalAssets(prev => updateAssets(prev));
+        setGlobalAssets(prev => updateAssets(prev));
     };
 
     // 初期ロード
@@ -42,8 +62,11 @@ const App = () => {
         API.getProjects().then(setProjects);
         // グローバルアセットにsource: 'global'を付与
         API.getAssets().then(assets => setGlobalAssets((assets || []).map(a => ({ ...a, source: 'global' }))));
-        // カラーパレットを読み込み
-        API.getPalette().then(data => setColorPalette(data?.colors || []));
+        // カラーパレットとデフォルト色を読み込み
+        API.getPalette().then(data => {
+            if (data?.colors) setColorPalette(data.colors);
+            if (data?.defaults) setDefaultColors(data.defaults);
+        });
     }, []);
 
     // キーボードパン（WASD / 矢印キー）
@@ -238,7 +261,7 @@ const App = () => {
                                         onClick={() => {
                                             const newPalette = colorPalette.filter((_, idx) => idx !== i);
                                             setColorPalette(newPalette);
-                                            API.savePalette({ colors: newPalette });
+                                            API.savePalette({ colors: newPalette, defaults: defaultColors });
                                         }}
                                         className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition"
                                     >
@@ -256,7 +279,7 @@ const App = () => {
                                         if (!colorPalette.includes(newColor)) {
                                             const newPalette = [...colorPalette, newColor];
                                             setColorPalette(newPalette);
-                                            API.savePalette({ colors: newPalette });
+                                            API.savePalette({ colors: newPalette, defaults: defaultColors });
                                         }
                                     }}
                                 />
@@ -264,6 +287,32 @@ const App = () => {
                             </label>
                         </div>
                         <p className="text-xs text-gray-400">クリックで削除、+ ボタンで新しい色を追加</p>
+                    </div>
+
+                     {/* デフォルト色設定 */}
+                     <div className="bg-white rounded-lg shadow p-6">
+                        <h2 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">
+                            🖌️ カテゴリ別デフォルト色
+                        </h2>
+                        <div className="flex gap-8">
+                            {[
+                                { type: 'room', label: '部屋・床' },
+                                { type: 'fixture', label: '設備・建具' },
+                                { type: 'furniture', label: '家具' }
+                            ].map(({ type, label }) => (
+                                <div key={type} className="flex flex-col items-center gap-2">
+                                    <span className="text-sm font-bold text-gray-600">{label}</span>
+                                    <ColorPicker
+                                        value={defaultColors[type] || '#cccccc'}
+                                        onChange={(c) => handleUpdateDefaultColor(type, c)}
+                                        palette={colorPalette}
+                                        onAddToPalette={addToPalette}
+                                    />
+                                    <span className="text-xs text-gray-400">{defaultColors[type] || '#cccccc'}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-4">ここで設定した色は、新規作成時の初期色や、未編集のアセットの自動色変更に適用されます。</p>
                     </div>
 
                     {/* 共通アセット管理 */}
@@ -473,6 +522,7 @@ const App = () => {
                     designTargetId={designTargetId}
                     instances={instances}
                     setInstances={setInstances}
+                    defaultColors={defaultColors}
                 />
             </div>
 
@@ -534,6 +584,7 @@ const App = () => {
                         selectedPointIndex={selectedPointIndex} setSelectedPointIndex={setSelectedPointIndex}
                         setDesignTargetId={setDesignTargetId}
                         palette={colorPalette} onAddToPalette={addToPalette}
+                        defaultColors={defaultColors}
                     />
                 )}
             </div>
