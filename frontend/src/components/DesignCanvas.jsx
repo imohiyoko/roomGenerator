@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
 import { generateSvgPath, generateEllipsePath, createRectPath } from '../lib/utils';
 import { RenderAssetShapes } from './SharedRender';
@@ -17,7 +17,9 @@ const DesignCanvasRender = ({ viewState, asset, shapes, selectedShapeIndices, se
                 <circle cx="0" cy="0" r="5" fill="red" opacity="0.5" />
                 {asset && (
                     <g>
-                        <rect x="0" y="0" width={asset.w * BASE_SCALE} height={asset.h * BASE_SCALE} fill="none" stroke="blue" strokeWidth="1" strokeDasharray="4 2" opacity="0.3" pointerEvents="none" />
+                        {/* アセット全体のバウンディングボックス（点線）- 常に現在のシェイプに合わせて再計算されたサイズを表示 */}
+                        <rect x={asset.x * BASE_SCALE || 0} y={asset.y * BASE_SCALE || 0} width={asset.w * BASE_SCALE} height={asset.h * BASE_SCALE} fill="none" stroke="blue" strokeWidth="1" strokeDasharray="4 2" opacity="0.3" pointerEvents="none" />
+
                         {shapes.map((s, i) => {
                             const isSelected = selectedShapeIndices.includes(i);
                             const style = { fill: s.color || asset.color, stroke: isSelected ? "#3b82f6" : "#999", strokeWidth: isSelected ? 2 : 1, cursor: 'move' };
@@ -202,6 +204,63 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
     const svgRef = useRef(null);
     const [marquee, setMarquee] = useState(null); // マーキー選択用
     const asset = assets.find(a => a.id === designTargetId);
+
+    // アセットのバウンディングボックス自動計算・更新
+    useEffect(() => {
+        if (!asset || !asset.shapes || asset.shapes.length === 0) return;
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let hasPoints = false;
+
+        asset.shapes.forEach(s => {
+            if (s.points) {
+                hasPoints = true;
+                s.points.forEach(p => {
+                    if (p.x < minX) minX = p.x;
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.y < minY) minY = p.y;
+                    if (p.y > maxY) maxY = p.y;
+                });
+            } else if (s.type === 'ellipse' || s.type === 'arc' || s.type === 'circle') {
+                hasPoints = true;
+                const cx = s.cx !== undefined ? s.cx : (s.x + s.w / 2);
+                const cy = s.cy !== undefined ? s.cy : (s.y + s.h / 2);
+                const rx = s.rx !== undefined ? s.rx : (s.w / 2);
+                const ry = s.ry !== undefined ? s.ry : (s.h / 2);
+                if (cx - rx < minX) minX = cx - rx;
+                if (cx + rx > maxX) maxX = cx + rx;
+                if (cy - ry < minY) minY = cy - ry;
+                if (cy + ry > maxY) maxY = cy + ry;
+            } else {
+                hasPoints = true;
+                const x = s.x || 0;
+                const y = s.y || 0;
+                const w = s.w || 0;
+                const h = s.h || 0;
+                if (x < minX) minX = x;
+                if (x + w > maxX) maxX = x + w;
+                if (y < minY) minY = y;
+                if (y + h > maxY) maxY = y + h;
+            }
+        });
+
+        if (hasPoints && minX !== Infinity) {
+            const w = Math.round(maxX - minX);
+            const h = Math.round(maxY - minY);
+            const x = Math.round(minX);
+            const y = Math.round(minY);
+
+            // 変更がある場合のみ更新 (無限ループ防止)
+            if (asset.w !== w || asset.h !== h || asset.x !== x || asset.y !== y) {
+                // setTimeoutで更新を遅延させないとレンダリングサイクルと競合する可能性あり
+                // ただし、頻繁な更新は重くなるので、drag中は更新しないほうが良いかもしれない
+                // ここではシンプルに更新するが、パフォーマンス問題が出る場合はdragRef.current.mode === 'idle'のチェックを入れる
+                if (dragRef.current.mode === 'idle') {
+                     setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, x, y, w, h } : a));
+                }
+            }
+        }
+    }, [asset, designTargetId, setLocalAssets]); // asset全体に依存するとループする恐れがあるが、asset.shapesのみに依存させたい
 
     const handleDown = (e, shapeIndex = null, pointIndex = null, resizeMode = null, handleIndex = null) => {
         if (svgRef.current && e.pointerId) svgRef.current.setPointerCapture(e.pointerId);
@@ -619,6 +678,55 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         setMarquee(null);
         setCursorMode('idle');
         dragRef.current = { mode: 'idle' };
+
+        // ドラッグ終了時に確実にアセットサイズを更新する
+        if (asset && asset.shapes) {
+            const shapes = asset.shapes;
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            let hasPoints = false;
+
+            shapes.forEach(s => {
+                if (s.points) {
+                    hasPoints = true;
+                    s.points.forEach(p => {
+                        if (p.x < minX) minX = p.x;
+                        if (p.x > maxX) maxX = p.x;
+                        if (p.y < minY) minY = p.y;
+                        if (p.y > maxY) maxY = p.y;
+                    });
+                } else if (s.type === 'ellipse' || s.type === 'arc' || s.type === 'circle') {
+                    hasPoints = true;
+                    const cx = s.cx !== undefined ? s.cx : (s.x + s.w / 2);
+                    const cy = s.cy !== undefined ? s.cy : (s.y + s.h / 2);
+                    const rx = s.rx !== undefined ? s.rx : (s.w / 2);
+                    const ry = s.ry !== undefined ? s.ry : (s.h / 2);
+                    if (cx - rx < minX) minX = cx - rx;
+                    if (cx + rx > maxX) maxX = cx + rx;
+                    if (cy - ry < minY) minY = cy - ry;
+                    if (cy + ry > maxY) maxY = cy + ry;
+                } else {
+                    hasPoints = true;
+                    const x = s.x || 0;
+                    const y = s.y || 0;
+                    const w = s.w || 0;
+                    const h = s.h || 0;
+                    if (x < minX) minX = x;
+                    if (x + w > maxX) maxX = x + w;
+                    if (y < minY) minY = y;
+                    if (y + h > maxY) maxY = y + h;
+                }
+            });
+
+            if (hasPoints && minX !== Infinity) {
+                const w = Math.round(maxX - minX);
+                const h = Math.round(maxY - minY);
+                const x = Math.round(minX);
+                const y = Math.round(minY);
+                if (asset.w !== w || asset.h !== h || asset.x !== x || asset.y !== y) {
+                    setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, x, y, w, h } : a));
+                }
+            }
+        }
     };
 
     const handleDeleteShape = (index) => {
