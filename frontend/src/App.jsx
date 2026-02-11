@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { API } from './lib/api';
 import { BASE_SCALE } from './lib/constants';
 import { deepClone } from './lib/utils';
@@ -106,7 +106,7 @@ const App = () => {
                 .filter(ga => !localAssetNames.has(ga.name))
             .map(ga => {
                 const clone = deepClone(ga);
-                clone.id = `a-fork-${ga.id}-${Date.now()}`;
+                clone.id = `a-fork-${ga.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
                 delete clone.source;
                 return clone;
             });
@@ -150,13 +150,19 @@ const App = () => {
         setProjects(p => p.map(proj => proj.id === id ? { ...proj, name } : proj));
     };
 
+    const lastAddRef = useRef(0);
+
     const handleAddInstance = (assetId) => {
+        const now = Date.now();
+        if (now - lastAddRef.current < 500) return; // Debounce 500ms
+        lastAddRef.current = now;
+
         let asset = [...localAssets, ...globalAssets].find(a => a.id === assetId);
         let targetAssetId = assetId;
 
         // グローバルアセットの場合、自動的にローカルコピーを作成
         if (asset && asset.source === 'global') {
-            const newLocalId = `a-fork-${Date.now()}`;
+            const newLocalId = `a-fork-${now}-${Math.floor(Math.random() * 1000)}`;
             const newLocalAsset = deepClone(asset);
             newLocalAsset.id = newLocalId;
             newLocalAsset.name = asset.name;
@@ -167,7 +173,7 @@ const App = () => {
         }
 
         const newInst = {
-            id: `i-${Date.now()}`,
+            id: `i-${now}-${Math.floor(Math.random() * 1000)}`,
             assetId: targetAssetId,
             x: (400 - viewState.x) / viewState.scale / BASE_SCALE,
             y: (300 - viewState.y) / viewState.scale / BASE_SCALE,
@@ -180,8 +186,12 @@ const App = () => {
     };
 
     const handleAddText = () => {
+        const now = Date.now();
+        if (now - lastAddRef.current < 500) return; // Debounce 500ms
+        lastAddRef.current = now;
+
         const newInst = {
-            id: `t-${Date.now()}`,
+            id: `t-${now}-${Math.floor(Math.random() * 1000)}`,
             type: 'text',
             text: 'テキスト',
             fontSize: 24,
