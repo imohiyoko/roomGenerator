@@ -161,16 +161,31 @@ func (a *App) GetPalette() (interface{}, error) {
 		"#ffffff", "#fdfcdc", "#fffbf0", "#f0e68c", "#e6e6fa",
 		"#b0e0e6", "#d3d3d3", "#cccccc", "#8b4513", "#87ceeb",
 	}
+	defaultTypeColors := map[string]string{
+		"room":      "#fdfcdc",
+		"furniture": "#8fbc8f",
+		"fixture":   "#cccccc",
+	}
 
 	data, err := a.loadJSON(filePath)
 	if err != nil {
-		a.logInfo("palette.json が見つかりません。デフォルトカラーを返します")
-		return map[string]interface{}{"colors": defaultColors}, nil
+		// palette.jsonが存在しない場合、作成してデフォルトを返す
+		a.logInfo("palette.json が見つかりません。デフォルトカラーを作成します")
+		defaultData := map[string]interface{}{
+			"colors":   defaultColors,
+			"defaults": defaultTypeColors,
+		}
+		if err := a.saveFile(filePath, defaultData); err != nil {
+			a.logError("palette.json 作成失敗: %v", err)
+		}
+		return defaultData, nil
 	}
-	var palette interface{}
+
+	var palette map[string]interface{}
 	if err := json.Unmarshal(data, &palette); err != nil {
 		return nil, err
 	}
+
 	return palette, nil
 }
 
@@ -356,6 +371,7 @@ func getDefaultGlobalAssets() []map[string]interface{} {
 	createPolygonAsset := func(id, name, typ string, w, h int, color string, snap bool) map[string]interface{} {
 		return map[string]interface{}{
 			"id": id, "name": name, "type": typ, "w": w, "h": h, "color": color, "snap": snap,
+			"isDefaultShape": true, // デフォルト形状としてマーク
 			"shapes": []interface{}{
 				map[string]interface{}{
 					"type":   "polygon",

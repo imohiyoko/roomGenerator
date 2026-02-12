@@ -27,14 +27,34 @@ const App = () => {
     const [selectedShapeIndices, setSelectedShapeIndices] = useState([]);
     const [selectedPointIndex, setSelectedPointIndex] = useState(null);
     const [colorPalette, setColorPalette] = useState([]);
+    const [defaultColors, setDefaultColors] = useState({ room: '#fdfcdc', furniture: '#8fbc8f', fixture: '#cccccc' });
 
     // パレットに色を追加
     const addToPalette = (color) => {
         if (!colorPalette.includes(color)) {
             const newPalette = [...colorPalette, color];
             setColorPalette(newPalette);
-            API.savePalette({ colors: newPalette });
+            API.savePalette({ colors: newPalette, defaults: defaultColors });
         }
+    };
+
+    // デフォルト色を更新
+    const handleUpdateDefaultColor = (type, color) => {
+        const newDefaults = { ...defaultColors, [type]: color };
+        setDefaultColors(newDefaults);
+        API.savePalette({ colors: colorPalette, defaults: newDefaults });
+
+        // isDefaultShape: true のアセットを一括更新
+        const updateAssets = (assets) => assets.map(a => {
+            if (a.isDefaultShape && a.type === type) {
+                const newShapes = (a.shapes || []).map(s => ({ ...s, color: color }));
+                return { ...a, color: color, shapes: newShapes };
+            }
+            return a;
+        });
+
+        setLocalAssets(prev => updateAssets(prev));
+        setGlobalAssets(prev => updateAssets(prev));
     };
 
     // 初期ロード
@@ -42,8 +62,11 @@ const App = () => {
         API.getProjects().then(setProjects);
         // グローバルアセットにsource: 'global'を付与
         API.getAssets().then(assets => setGlobalAssets((assets || []).map(a => ({ ...a, source: 'global' }))));
-        // カラーパレットを読み込み
-        API.getPalette().then(data => setColorPalette(data?.colors || []));
+        // カラーパレットとデフォルト色を読み込み
+        API.getPalette().then(data => {
+            if (data?.colors) setColorPalette(data.colors);
+            if (data?.defaults) setDefaultColors(data.defaults);
+        });
     }, []);
 
     // キーボードパン（WASD / 矢印キー）
@@ -79,12 +102,6 @@ const App = () => {
                 const delta = e.deltaY < 0 ? step : -step;
                 const currentValue = parseFloat(e.target.value) || 0;
                 const newValue = currentValue + delta;
-                // Reactのステート更新をトリガーするために setter を呼び出す必要があるが、
-                // ここでは標準イベント発火で対応（React管理外の変更になるため注意が必要だが、簡易実装として）
-                // ただし、React 18 ではこれだけでは反映されない場合があるため、onChangeハンドラ側で制御するのがベター。
-                // 今回は移植元のコードに従うが、input要素への直接操作はReactでは非推奨。
-                // 本来は各コンポーネントでonWheelを実装すべきだが、グローバルリスナーでの実装を維持するならカスタムイベント等が必要。
-                // とりあえずこの機能は移植元にあるので残すが、Reactではうまく動かない可能性がある。
             }
         };
         window.addEventListener('wheel', handleWheel, { passive: false });
@@ -106,16 +123,64 @@ const App = () => {
                     const clone = deepClone(ga);
                     clone.id = `a-fork-${ga.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
                     delete clone.source;
+                    // デフォルト形状フラグを維持 (存在する場合)
+                    if (ga.isDefaultShape) clone.isDefaultShape = true;
+                    // ロード時に色を最新のデフォルトに同期
+                    if (clone.isDefaultShape && defaultColors[clone.type]) {
+                        const color = defaultColors[clone.type];
+                        clone.color = color;
+                        clone.shapes = (clone.shapes || []).map(s => ({...s, color}));
+                    }
                     return clone;
                 });
                 setLocalAssets(forkedAssets);
             } else {
-                setLocalAssets(loadedAssets);
+                // 既存のローカルアセットロード時も、未編集なら最新のデフォルト色に同期する
+                const syncedAssets = loadedAssets.map(a => {
+                    // defaultColorsがロード済みで、かつ色が異なる場合のみ更新
+                    if (a.isDefaultShape && defaultColors[a.type] && a.color !== defaultColors[a.type]) {
+                        const color = defaultColors[a.type];
+                        // 参照を切るためにクローンしてから変更
+                        const updated = { ...a, color: color };
+                        updated.shapes = (a.shapes || []).map(s => ({ ...s, color: color }));
+                        return updated;
+                    }
+                    return a;
+                });
+                setLocalAssets(syncedAssets);
             }
 
             setInstances(data?.instances || []);
         });
     }, [currentProjectId, globalAssets]);
+    // defaultColorsを依存配列に含めると、色変更時に再ロードが走るリスクがあるが、
+    // ここはAPI.getProjectDataを呼んでいるため、defaultColorsが変わっただけでリロードするのは非効率＆ループの危険。
+    // 代わりに、defaultColorsが変わった時の同期は handleUpdateDefaultColor で既に行われている。
+    // 問題は「初期ロード時に defaultColors が未完了の場合」だが、
+    // Appの初期ロードでAPI.getPaletteとAPI.getProjectsは並行して走る。
+    // 通常はPaletteが軽いので先に終わるが、保証はない。
+    //
+    // 安全策として、defaultColorsが更新された時にも同期処理を走らせるEffectを追加する。
+
+    useEffect(() => {
+        if (localAssets.length === 0 || Object.keys(defaultColors).length === 0) return;
+
+        let hasChanges = false;
+        const syncedAssets = localAssets.map(a => {
+            if (a.isDefaultShape && defaultColors[a.type] && a.color !== defaultColors[a.type]) {
+                hasChanges = true;
+                const color = defaultColors[a.type];
+                const newShapes = (a.shapes || []).map(s => ({ ...s, color: color }));
+                return { ...a, color: color, shapes: newShapes };
+            }
+            return a;
+        });
+
+        if (hasChanges) {
+            setLocalAssets(syncedAssets);
+        }
+    }, [defaultColors]); // localAssetsを依存に入れるとループするので入れない。defaultColors変更時のみチェック。
+
 
     // 自動保存 (簡易)
     useEffect(() => {
@@ -168,6 +233,15 @@ const App = () => {
             newLocalAsset.id = newLocalId;
             newLocalAsset.name = asset.name;
             delete newLocalAsset.source;
+            // デフォルト形状フラグを維持
+            if (asset.isDefaultShape) newLocalAsset.isDefaultShape = true;
+            // 同期
+            if (newLocalAsset.isDefaultShape && defaultColors[newLocalAsset.type]) {
+                const color = defaultColors[newLocalAsset.type];
+                newLocalAsset.color = color;
+                newLocalAsset.shapes = (newLocalAsset.shapes || []).map(s => ({...s, color}));
+            }
+
             setLocalAssets(prev => [...prev, newLocalAsset]);
             targetAssetId = newLocalId;
             asset = newLocalAsset;
@@ -238,7 +312,7 @@ const App = () => {
                                         onClick={() => {
                                             const newPalette = colorPalette.filter((_, idx) => idx !== i);
                                             setColorPalette(newPalette);
-                                            API.savePalette({ colors: newPalette });
+                                            API.savePalette({ colors: newPalette, defaults: defaultColors });
                                         }}
                                         className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition"
                                     >
@@ -256,7 +330,7 @@ const App = () => {
                                         if (!colorPalette.includes(newColor)) {
                                             const newPalette = [...colorPalette, newColor];
                                             setColorPalette(newPalette);
-                                            API.savePalette({ colors: newPalette });
+                                            API.savePalette({ colors: newPalette, defaults: defaultColors });
                                         }
                                     }}
                                 />
@@ -264,6 +338,32 @@ const App = () => {
                             </label>
                         </div>
                         <p className="text-xs text-gray-400">クリックで削除、+ ボタンで新しい色を追加</p>
+                    </div>
+
+                     {/* デフォルト色設定 */}
+                     <div className="bg-white rounded-lg shadow p-6">
+                        <h2 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">
+                            🖌️ カテゴリ別デフォルト色
+                        </h2>
+                        <div className="flex gap-8">
+                            {[
+                                { type: 'room', label: '部屋・床' },
+                                { type: 'fixture', label: '設備・建具' },
+                                { type: 'furniture', label: '家具' }
+                            ].map(({ type, label }) => (
+                                <div key={type} className="flex flex-col items-center gap-2">
+                                    <span className="text-sm font-bold text-gray-600">{label}</span>
+                                    <ColorPicker
+                                        value={defaultColors[type] || '#cccccc'}
+                                        onChange={(c) => handleUpdateDefaultColor(type, c)}
+                                        palette={colorPalette}
+                                        onAddToPalette={addToPalette}
+                                    />
+                                    <span className="text-xs text-gray-400">{defaultColors[type] || '#cccccc'}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-4">ここで設定した色は、新規作成時の初期色や、未編集のアセットの自動色変更に適用されます。</p>
                     </div>
 
                     {/* 共通アセット管理 */}
@@ -332,9 +432,15 @@ const App = () => {
                                 const editAsset = globalAssets.find(a => a.id === designTargetId);
                                 if (!editAsset) return null;
                                 const updateAsset = (key, value) => {
-                                    const newAssets = globalAssets.map(a =>
-                                        a.id === designTargetId ? { ...a, [key]: value } : a
-                                    );
+                                    const newAssets = globalAssets.map(a => {
+                                        if (a.id !== designTargetId) return a;
+                                        const updates = { [key]: value };
+                                        // 色やサイズを手動変更した場合、デフォルト形状フラグを下ろす
+                                        if (['color', 'w', 'h'].includes(key)) {
+                                            updates.isDefaultShape = false;
+                                        }
+                                        return { ...a, ...updates };
+                                    });
                                     setGlobalAssets(newAssets);
                                 };
                                 return (
@@ -473,6 +579,7 @@ const App = () => {
                     designTargetId={designTargetId}
                     instances={instances}
                     setInstances={setInstances}
+                    defaultColors={defaultColors}
                 />
             </div>
 
@@ -534,6 +641,7 @@ const App = () => {
                         selectedPointIndex={selectedPointIndex} setSelectedPointIndex={setSelectedPointIndex}
                         setDesignTargetId={setDesignTargetId}
                         palette={colorPalette} onAddToPalette={addToPalette}
+                        defaultColors={defaultColors}
                     />
                 )}
             </div>
