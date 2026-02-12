@@ -137,38 +137,6 @@ const App = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [undo, redo]);
 
-    // Number Input Wheel
-    useEffect(() => {
-        const handleWheel = (e) => {
-            if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
-                e.preventDefault();
-                const step = e.shiftKey ? 1000 : 10;
-                const delta = e.deltaY < 0 ? step : -step;
-                const target = e.target;
-
-                // Manually trigger input event for React controlled components
-                // Note: React uses a special tracker for value changes, so we need to set the value
-                // and dispatch a bubbling input event.
-                const currentValue = parseFloat(target.value) || 0;
-                const min = target.min !== '' ? parseFloat(target.min) : -Infinity;
-                const max = target.max !== '' ? parseFloat(target.max) : Infinity;
-
-                let nextValue = currentValue + delta;
-                if (!isNaN(min)) nextValue = Math.max(min, nextValue);
-                if (!isNaN(max)) nextValue = Math.min(max, nextValue);
-
-                // Directly set value property
-                // React 16+ hack to trigger onChange
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                nativeInputValueSetter.call(target, nextValue);
-
-                const ev = new Event('input', { bubbles: true });
-                target.dispatchEvent(ev);
-            }
-        };
-        window.addEventListener('wheel', handleWheel, { passive: false });
-        return () => window.removeEventListener('wheel', handleWheel);
-    }, []);
 
 
     // Handlers

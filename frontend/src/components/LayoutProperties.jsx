@@ -1,5 +1,6 @@
 import React from 'react';
 import { Icon, Icons } from './Icon';
+import { NumberInput } from './NumberInput';
 import { fromMM, toMM } from '../lib/utils';
 
 export const LayoutProperties = ({ instances, setInstances, selectedIds, assets, setSelectedIds, setMode, setDesignTargetId }) => {
@@ -150,16 +151,16 @@ export const LayoutProperties = ({ instances, setInstances, selectedIds, assets,
                             <div className="text-xs font-bold text-gray-400 mb-2 border-b pb-1">座標・回転</div>
                             <div className="prop-row">
                                 <label className="prop-label">X (mm)</label>
-                                <input type="number" value={toMM(item.x)} onChange={e => update('x', fromMM(Number(e.target.value)))} className="prop-input" />
+                                <NumberInput value={toMM(item.x)} onChange={e => update('x', fromMM(Number(e.target.value)))} className="prop-input" />
                             </div>
                             <div className="prop-row">
                                 <label className="prop-label">Y (mm)</label>
-                                <input type="number" value={toMM(item.y)} onChange={e => update('y', fromMM(Number(e.target.value)))} className="prop-input" />
+                                <NumberInput value={toMM(item.y)} onChange={e => update('y', fromMM(Number(e.target.value)))} className="prop-input" />
                             </div>
                             <div className="prop-row">
                                 <label className="prop-label">回転 (°)</label>
                                 <div className="flex-1 flex gap-2">
-                                    <input type="number" value={item.rotation} onChange={e => update('rotation', Number(e.target.value))} className="prop-input" />
+                                    <NumberInput value={item.rotation} onChange={e => update('rotation', Number(e.target.value))} className="prop-input" />
                                     <button onClick={() => update('rotation', (item.rotation + 90) % 360)} className="px-2 border rounded bg-gray-50 hover:bg-gray-100 text-xs">↻</button>
                                 </div>
                             </div>
@@ -175,7 +176,7 @@ export const LayoutProperties = ({ instances, setInstances, selectedIds, assets,
                                 </div>
                                 <div className="prop-row">
                                     <label className="prop-label">サイズ</label>
-                                    <input type="number" value={item.fontSize} onChange={e => update('fontSize', Number(e.target.value))} className="prop-input" />
+                                    <NumberInput value={item.fontSize} onChange={e => update('fontSize', Number(e.target.value))} className="prop-input" />
                                 </div>
                                 <div className="prop-row">
                                     <label className="prop-label">色</label>
