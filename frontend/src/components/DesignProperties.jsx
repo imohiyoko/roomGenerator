@@ -3,7 +3,7 @@ import { Icon, Icons } from './Icon';
 import { ColorPicker } from './ColorPicker';
 import { NumberInput } from './NumberInput';
 import { fromMM, toMM, createRectPath, createTrianglePath, deepClone } from '../lib/utils';
-import { useStore } from '../lib/store';
+import { useStore } from '../store';
 
 export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, setDesignTargetId, palette, onAddToPalette, defaultColors }) => {
     // Select state from store
