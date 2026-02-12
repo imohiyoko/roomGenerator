@@ -36,14 +36,23 @@ def run():
         time.sleep(1)
 
         print("Changing Room Default Color...")
-        # Open custom color picker for Room (first one)
-        page.get_by_title("カスタム色").first.click()
+        room_section = page.locator("div.flex-col").filter(has_text="部屋・床").first
+        room_section.get_by_title("カスタム色").click()
 
-        # Change to Yellow
-        room_picker = page.locator("input[type='color']").first
-        room_picker.fill("#ffff00")
-        time.sleep(0.5)
-        expect(page.get_by_text("#ffff00")).to_be_visible()
+        picker = room_section.locator("input[type='color']")
+        picker.wait_for(state="visible")
+        picker.fill("#ffff00")
+
+        time.sleep(1)
+
+        # Check Mock
+        palette = page.evaluate("window.mockPalette")
+        if palette and palette.get('defaults', {}).get('room') == '#ffff00':
+             print("Verified: Backend SavePalette called with #ffff00")
+        else:
+             print("FAILED: Backend SavePalette NOT called or wrong value", palette)
+             page.screenshot(path="/home/jules/verification/fail_save.png")
+             exit(1)
 
         print("Going to Project...")
         page.get_by_role("button", name="戻る").click()
@@ -57,22 +66,8 @@ def run():
         page.get_by_role("button", name="+ 新規パーツ").click()
         time.sleep(0.5)
 
-        # Verify Yellow
-        # We need to open the custom picker in sidebar property panel to check input value
-        # Sidebar properties also uses ColorPicker.
-        # It's inside "DesignProperties".
-        # Let's verify by checking the text span if DesignProperties renders it?
-        # DesignProperties does NOT render the hex text below ColorPicker in my implementation (I checked DesignProperties.jsx previously).
-        # It only renders ColorPicker.
-
-        # However, ColorPicker has `value` prop.
-        # If I open the custom picker in sidebar, the input should have the value.
         print("Verifying Part Color...")
-        # Find the custom color button in the sidebar (it might be the only one visible if others are hidden? No, sidebar has one).
-        # We are in Design Mode. Sidebar has properties.
-        # Click the custom color button in sidebar.
-        # There might be multiple ColorPickers (one for 'overall color', one for 'shape color').
-        # Let's click the first available 'カスタム色' button which should be for the overall asset color.
+        # Open properties custom picker
         page.get_by_title("カスタム色").first.click()
         expect(page.locator("input[type='color']").first).to_have_value("#ffff00")
 
@@ -94,8 +89,11 @@ def run():
         page.get_by_role("button", name="共通ライブラリ管理").click()
         time.sleep(0.5)
 
-        page.get_by_title("カスタム色").first.click()
-        page.locator("input[type='color']").first.fill("#00ffff")
+        room_section = page.locator("div.flex-col").filter(has_text="部屋・床").first
+        room_section.get_by_title("カスタム色").click()
+        picker = room_section.locator("input[type='color']")
+        picker.wait_for(state="visible")
+        picker.fill("#00ffff")
         time.sleep(0.5)
 
         # Verify Part did NOT change

@@ -186,11 +186,6 @@ func (a *App) GetPalette() (interface{}, error) {
 		return nil, err
 	}
 
-	// 後方互換性: defaultsキーがない場合は追加
-	if _, ok := palette["defaults"]; !ok {
-		palette["defaults"] = defaultTypeColors
-	}
-
 	return palette, nil
 }
 
@@ -376,6 +371,7 @@ func getDefaultGlobalAssets() []map[string]interface{} {
 	createPolygonAsset := func(id, name, typ string, w, h int, color string, snap bool) map[string]interface{} {
 		return map[string]interface{}{
 			"id": id, "name": name, "type": typ, "w": w, "h": h, "color": color, "snap": snap,
+			"isDefaultShape": true, // デフォルト形状としてマーク
 			"shapes": []interface{}{
 				map[string]interface{}{
 					"type":   "polygon",
