@@ -102,12 +102,6 @@ const App = () => {
                 const delta = e.deltaY < 0 ? step : -step;
                 const currentValue = parseFloat(e.target.value) || 0;
                 const newValue = currentValue + delta;
-                // Reactのステート更新をトリガーするために setter を呼び出す必要があるが、
-                // ここでは標準イベント発火で対応（React管理外の変更になるため注意が必要だが、簡易実装として）
-                // ただし、React 18 ではこれだけでは反映されない場合があるため、onChangeハンドラ側で制御するのがベター。
-                // 今回は移植元のコードに従うが、input要素への直接操作はReactでは非推奨。
-                // 本来は各コンポーネントでonWheelを実装すべきだが、グローバルリスナーでの実装を維持するならカスタムイベント等が必要。
-                // とりあえずこの機能は移植元にあるので残すが、Reactではうまく動かない可能性がある。
             }
         };
         window.addEventListener('wheel', handleWheel, { passive: false });
@@ -129,16 +123,64 @@ const App = () => {
                     const clone = deepClone(ga);
                     clone.id = `a-fork-${ga.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
                     delete clone.source;
+                    // デフォルト形状フラグを維持 (存在する場合)
+                    if (ga.isDefaultShape) clone.isDefaultShape = true;
+                    // ロード時に色を最新のデフォルトに同期
+                    if (clone.isDefaultShape && defaultColors[clone.type]) {
+                        const color = defaultColors[clone.type];
+                        clone.color = color;
+                        clone.shapes = (clone.shapes || []).map(s => ({...s, color}));
+                    }
                     return clone;
                 });
                 setLocalAssets(forkedAssets);
             } else {
-                setLocalAssets(loadedAssets);
+                // 既存のローカルアセットロード時も、未編集なら最新のデフォルト色に同期する
+                const syncedAssets = loadedAssets.map(a => {
+                    // defaultColorsがロード済みで、かつ色が異なる場合のみ更新
+                    if (a.isDefaultShape && defaultColors[a.type] && a.color !== defaultColors[a.type]) {
+                        const color = defaultColors[a.type];
+                        // 参照を切るためにクローンしてから変更
+                        const updated = { ...a, color: color };
+                        updated.shapes = (a.shapes || []).map(s => ({ ...s, color: color }));
+                        return updated;
+                    }
+                    return a;
+                });
+                setLocalAssets(syncedAssets);
             }
 
             setInstances(data?.instances || []);
         });
     }, [currentProjectId, globalAssets]);
+    // defaultColorsを依存配列に含めると、色変更時に再ロードが走るリスクがあるが、
+    // ここはAPI.getProjectDataを呼んでいるため、defaultColorsが変わっただけでリロードするのは非効率＆ループの危険。
+    // 代わりに、defaultColorsが変わった時の同期は handleUpdateDefaultColor で既に行われている。
+    // 問題は「初期ロード時に defaultColors が未完了の場合」だが、
+    // Appの初期ロードでAPI.getPaletteとAPI.getProjectsは並行して走る。
+    // 通常はPaletteが軽いので先に終わるが、保証はない。
+    //
+    // 安全策として、defaultColorsが更新された時にも同期処理を走らせるEffectを追加する。
+
+    useEffect(() => {
+        if (localAssets.length === 0 || Object.keys(defaultColors).length === 0) return;
+
+        let hasChanges = false;
+        const syncedAssets = localAssets.map(a => {
+            if (a.isDefaultShape && defaultColors[a.type] && a.color !== defaultColors[a.type]) {
+                hasChanges = true;
+                const color = defaultColors[a.type];
+                const newShapes = (a.shapes || []).map(s => ({ ...s, color: color }));
+                return { ...a, color: color, shapes: newShapes };
+            }
+            return a;
+        });
+
+        if (hasChanges) {
+            setLocalAssets(syncedAssets);
+        }
+    }, [defaultColors]); // localAssetsを依存に入れるとループするので入れない。defaultColors変更時のみチェック。
+
 
     // 自動保存 (簡易)
     useEffect(() => {
@@ -191,6 +233,15 @@ const App = () => {
             newLocalAsset.id = newLocalId;
             newLocalAsset.name = asset.name;
             delete newLocalAsset.source;
+            // デフォルト形状フラグを維持
+            if (asset.isDefaultShape) newLocalAsset.isDefaultShape = true;
+            // 同期
+            if (newLocalAsset.isDefaultShape && defaultColors[newLocalAsset.type]) {
+                const color = defaultColors[newLocalAsset.type];
+                newLocalAsset.color = color;
+                newLocalAsset.shapes = (newLocalAsset.shapes || []).map(s => ({...s, color}));
+            }
+
             setLocalAssets(prev => [...prev, newLocalAsset]);
             targetAssetId = newLocalId;
             asset = newLocalAsset;

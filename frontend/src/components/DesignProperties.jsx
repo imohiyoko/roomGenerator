@@ -188,6 +188,8 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
         newA.id = newId;
         newA.name = asset.name + ' (コピー)';
         delete newA.source;
+        // デフォルト形状フラグを維持
+        if (asset.isDefaultShape) newA.isDefaultShape = true;
         setLocalAssets(prev => [...prev, newA]);
         if (setDesignTargetId) setDesignTargetId(newId);
     };

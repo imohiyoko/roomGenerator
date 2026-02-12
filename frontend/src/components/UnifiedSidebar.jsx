@@ -8,6 +8,8 @@ export const UnifiedSidebar = ({ mode, assets, onAddInstance, onAddText, setLoca
 
     // 新規作成 (Design Mode用)
     const addNewAsset = () => {
+        // App.jsx から defaultColors が渡されていない場合のフォールバックを考慮
+        // 初期状態では defaultColors は非同期ロードされるため、空の可能性がある
         const defaultColor = (defaultColors && defaultColors.room) ? defaultColors.room : '#cccccc';
         const initialShape = {
             type: 'polygon',

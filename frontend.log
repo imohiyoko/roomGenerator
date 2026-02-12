@@ -7,3 +7,15 @@
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
+8:51:52 AM [vite] hmr update /src/App.jsx
+hmr update /src/style.css
+8:52:08 AM [vite] hmr update /src/components/DesignProperties.jsx
+hmr update /src/style.css
+8:54:03 AM [vite] hmr update /src/components/UnifiedSidebar.jsx
+hmr update /src/style.css
+8:57:23 AM [vite] hmr update /src/App.jsx
+hmr update /src/style.css
+8:59:14 AM [vite] hmr update /src/App.jsx
+hmr update /src/style.css
+9:01:58 AM [vite] hmr update /src/App.jsx
+hmr update /src/style.css
