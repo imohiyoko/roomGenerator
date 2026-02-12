@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icon, Icons } from './Icon';
 import { ColorPicker } from './ColorPicker';
+import { NumberInput } from './NumberInput';
 import { fromMM, toMM, createRectPath, createTrianglePath, deepClone } from '../lib/utils';
 import { useStore } from '../lib/store';
 
@@ -315,11 +316,11 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                         <div className="text-xs font-bold text-red-600 mb-2">選択頂点 (mm)</div>
                         <div className="prop-row">
                             <label className="prop-label">X</label>
-                            <input type="number" value={toMM(selectedPoint.x)} onChange={e => updatePoint('x', fromMM(Number(e.target.value)))} className="prop-input" />
+                            <NumberInput value={toMM(selectedPoint.x)} onChange={e => updatePoint('x', fromMM(Number(e.target.value)))} className="prop-input" />
                         </div>
                         <div className="prop-row">
                             <label className="prop-label">Y</label>
-                            <input type="number" value={toMM(selectedPoint.y)} onChange={e => updatePoint('y', fromMM(Number(e.target.value)))} className="prop-input" />
+                            <NumberInput value={toMM(selectedPoint.y)} onChange={e => updatePoint('y', fromMM(Number(e.target.value)))} className="prop-input" />
                         </div>
                         <div className="mt-2 pt-2 border-t">
                             <button onClick={() => {
@@ -337,10 +338,10 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                         <div className="text-xs font-bold text-blue-600 mb-2">選択パーツ (mm)</div>
                         {selectedShape.type !== 'polygon' && selectedShape.type !== 'ellipse' && (
                             <>
-                                <div className="prop-row"><label className="prop-label">幅</label><input type="number" value={toMM(selectedShape.w)} onChange={e => updateShape('w', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">奥</label><input type="number" value={toMM(selectedShape.h)} onChange={e => updateShape('h', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">X</label><input type="number" value={toMM(selectedShape.x || 0)} onChange={e => updateShape('x', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">Y</label><input type="number" value={toMM(selectedShape.y || 0)} onChange={e => updateShape('y', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">幅</label><NumberInput value={toMM(selectedShape.w)} onChange={e => updateShape('w', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">奥</label><NumberInput value={toMM(selectedShape.h)} onChange={e => updateShape('h', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">X</label><NumberInput value={toMM(selectedShape.x || 0)} onChange={e => updateShape('x', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">Y</label><NumberInput value={toMM(selectedShape.y || 0)} onChange={e => updateShape('y', fromMM(Number(e.target.value)))} className="prop-input" /></div>
                             </>
                         )}
                         <div className="pt-2">
@@ -352,13 +353,13 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                         {selectedShape.type === 'ellipse' && (
                             <div className="mt-3 border-t pt-2">
                                 <div className="text-[10px] font-bold text-green-600 mb-2">楕円プロパティ</div>
-                                <div className="prop-row"><label className="prop-label">中心X</label><input type="number" value={toMM(selectedShape.cx || 0)} onChange={e => updateShape('cx', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">中心Y</label><input type="number" value={toMM(selectedShape.cy || 0)} onChange={e => updateShape('cy', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">横半径</label><input type="number" value={toMM(selectedShape.rx || 50)} onChange={e => updateShape('rx', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">縦半径</label><input type="number" value={toMM(selectedShape.ry || 50)} onChange={e => updateShape('ry', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">回転°</label><input type="number" value={selectedShape.rotation || 0} onChange={e => updateShape('rotation', Number(e.target.value))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">開始角°</label><input type="number" value={selectedShape.startAngle || 0} onChange={e => updateShape('startAngle', Number(e.target.value))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">終了角°</label><input type="number" value={selectedShape.endAngle || 360} onChange={e => updateShape('endAngle', Number(e.target.value))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">中心X</label><NumberInput value={toMM(selectedShape.cx || 0)} onChange={e => updateShape('cx', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">中心Y</label><NumberInput value={toMM(selectedShape.cy || 0)} onChange={e => updateShape('cy', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">横半径</label><NumberInput value={toMM(selectedShape.rx || 50)} onChange={e => updateShape('rx', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">縦半径</label><NumberInput value={toMM(selectedShape.ry || 50)} onChange={e => updateShape('ry', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">回転°</label><NumberInput value={selectedShape.rotation || 0} onChange={e => updateShape('rotation', Number(e.target.value))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">開始角°</label><NumberInput value={selectedShape.startAngle || 0} onChange={e => updateShape('startAngle', Number(e.target.value))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">終了角°</label><NumberInput value={selectedShape.endAngle || 360} onChange={e => updateShape('endAngle', Number(e.target.value))} className="prop-input" /></div>
                                 <div className="prop-row items-center">
                                     <label className="prop-label">形状</label>
                                     <select value={selectedShape.arcMode || 'sector'} onChange={e => updateShape('arcMode', e.target.value)} className="prop-input text-xs">
@@ -380,14 +381,14 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                             <div className={`border rounded p-1.5 ${selectedPointIndex === idx ? 'bg-purple-50 border-purple-300' : 'hover:bg-gray-50'}`}>
                                                 <div className="flex items-center gap-1">
                                                     <span onClick={() => setSelectedPointIndex(idx)} className="w-5 h-5 flex items-center justify-center font-bold text-purple-400 bg-purple-100 rounded cursor-pointer text-[10px]">{idx}</span>
-                                                    <input type="number" value={toMM(pt.x)} onChange={e => {
+                                                    <NumberInput value={toMM(pt.x)} onChange={e => {
                                                         const newPts = [...selectedShape.points];
                                                         newPts[idx] = { ...newPts[idx], x: fromMM(Number(e.target.value)) };
                                                         const newShapes = [...asset.shapes];
                                                         newShapes[targetIndex].points = newPts;
                                                         setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
                                                     }} className="flex-1 text-[10px] p-0.5 border rounded w-12 text-center" placeholder="X" />
-                                                    <input type="number" value={toMM(pt.y)} onChange={e => {
+                                                    <NumberInput value={toMM(pt.y)} onChange={e => {
                                                         const newPts = [...selectedShape.points];
                                                         newPts[idx] = { ...newPts[idx], y: fromMM(Number(e.target.value)) };
                                                         const newShapes = [...asset.shapes];
@@ -457,7 +458,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                                         {pt.handles.map((h, hid) => (
                                                             <div key={hid} className="flex items-center gap-1 bg-orange-50 rounded px-1 py-0.5">
                                                                 <span className="text-[8px] text-orange-500 font-bold w-4">C{hid + 1}</span>
-                                                                <input type="number" value={toMM(h.x)} onChange={e => {
+                                                                <NumberInput value={toMM(h.x)} onChange={e => {
                                                                     const newPts = [...selectedShape.points];
                                                                     const handles = [...newPts[idx].handles];
                                                                     handles[hid] = { ...handles[hid], x: fromMM(Number(e.target.value)) };
@@ -466,7 +467,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                                                     newShapes[targetIndex].points = newPts;
                                                                     setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
                                                                 }} className="flex-1 text-[9px] p-0.5 border rounded w-10 text-center" placeholder="X" />
-                                                                <input type="number" value={toMM(h.y)} onChange={e => {
+                                                                <NumberInput value={toMM(h.y)} onChange={e => {
                                                                     const newPts = [...selectedShape.points];
                                                                     const handles = [...newPts[idx].handles];
                                                                     handles[hid] = { ...handles[hid], y: fromMM(Number(e.target.value)) };
