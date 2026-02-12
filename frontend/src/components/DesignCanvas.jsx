@@ -4,124 +4,144 @@ import { generateSvgPath, generateEllipsePath, createRectPath } from '../lib/uti
 import { useStore } from '../lib/store';
 
 // Render Component
-const DesignCanvasRender = ({ viewState, asset, shapes, selectedShapeIndices, selectedPointIndex, onDown, onMove, onUp, onDeleteShape, svgRef, marquee }) => (
-    <div className="w-full h-full absolute top-0 left-0 overflow-auto canvas-scroll pt-5 pl-5"
-        onPointerDown={e => onDown(e, null)}
-        onPointerMove={onMove}
-        onPointerUp={onUp}
-        ref={svgRef}
-    >
-        <svg width="3000" height="3000" style={{ minWidth: '3000px', minHeight: '3000px' }}>
-            <g transform={`translate(${viewState.x}, ${viewState.y}) scale(${viewState.scale})`}>
-                <line x1="-5000" y1="0" x2="5000" y2="0" stroke="#ccc" strokeWidth="2" />
-                <line x1="0" y1="-5000" x2="0" y2="5000" stroke="#ccc" strokeWidth="2" />
-                <circle cx="0" cy="0" r="5" fill="red" opacity="0.5" />
-                {asset && (
-                    <g>
-                        <rect x={asset.boundX * BASE_SCALE || 0} y={asset.boundY * BASE_SCALE || 0} width={asset.w * BASE_SCALE} height={asset.h * BASE_SCALE} fill="none" stroke="blue" strokeWidth="1" strokeDasharray="4 2" opacity="0.3" pointerEvents="none" />
+const DesignCanvasRender = ({ viewState, asset, shapes, selectedShapeIndices, selectedPointIndex, onDown, onMove, onUp, onDeleteShape, svgRef, marquee, cursorMode }) => {
+    // Apply cursor style
+    useEffect(() => {
+        if (!svgRef.current) return;
+        let cursorStyle = 'default';
+        switch (cursorMode) {
+            case 'draggingShape': cursorStyle = 'move'; break;
+            case 'draggingHandle':
+            case 'draggingPoint': cursorStyle = 'crosshair'; break;
+            case 'draggingAngle':
+            case 'draggingRotation': cursorStyle = 'alias'; break;
+            case 'resizing': cursorStyle = 'nwse-resize'; break;
+            case 'ew-resize': cursorStyle = 'ew-resize'; break;
+            case 'panning': cursorStyle = 'grabbing'; break;
+            default: cursorStyle = 'default'; break;
+        }
+        svgRef.current.style.cursor = cursorStyle;
+    }, [cursorMode, svgRef]);
 
-                        {shapes.map((s, i) => {
-                            const isSelected = selectedShapeIndices.includes(i);
-                            const style = { fill: s.color || asset.color, stroke: isSelected ? "#3b82f6" : "#999", strokeWidth: isSelected ? 2 : 1, cursor: 'move' };
-                            const rot = s.rotation || 0;
-                            const rotateTransform = rot && s.type === 'ellipse' ? `rotate(${rot} ${(s.cx || 0) * BASE_SCALE} ${(s.cy || 0) * BASE_SCALE})` : '';
-                            return (
-                                <g key={i} onPointerDown={(e) => onDown(e, i)}>
-                                    {s.type === 'circle'
-                                        ? <ellipse cx={(s.x + s.w / 2) * BASE_SCALE} cy={(s.y + s.h / 2) * BASE_SCALE} rx={s.w * BASE_SCALE / 2} ry={s.h * BASE_SCALE / 2} {...style} />
-                                        : s.type === 'ellipse'
-                                            ? <path d={generateEllipsePath(s)} transform={rotateTransform} {...style} />
-                                            : <path d={generateSvgPath(s.points)} {...style} />
-                                    }
-                                    {isSelected && s.type === 'ellipse' && (() => {
-                                        const cx = (s.cx || 0) * BASE_SCALE;
-                                        const cy = (s.cy || 0) * BASE_SCALE;
-                                        const rxs = (s.rx || 50) * BASE_SCALE;
-                                        const rys = (s.ry || 50) * BASE_SCALE;
-                                        const startAngle = s.startAngle || 0;
-                                        const endAngle = s.endAngle || 360;
-                                        const startRad = startAngle * Math.PI / 180;
-                                        const endRad = endAngle * Math.PI / 180;
-                                        const sx = cx + rxs * Math.cos(startRad);
-                                        const sy = cy + rys * Math.sin(startRad);
-                                        const ex = cx + rxs * Math.cos(endRad);
-                                        const ey = cy + rys * Math.sin(endRad);
-                                        const rotHandleY = cy - rys - 20;
-                                        return (
-                                            <g transform={rotateTransform}>
-                                                <circle cx={cx} cy={cy} r="6" fill="red" stroke="white" strokeWidth="2" className="cursor-move" />
-                                                <rect x={cx + rxs - 4} y={cy - 4} width="8" height="8" fill="orange" stroke="white" strokeWidth="1" className="cursor-ew-resize" onPointerDown={(e) => onDown(e, i, 'rx')} />
-                                                <rect x={cx - 4} y={cy + rys - 4} width="8" height="8" fill="orange" stroke="white" strokeWidth="1" className="cursor-ns-resize" onPointerDown={(e) => onDown(e, i, 'ry')} />
-                                                <rect x={cx + rxs - 4} y={cy + rys - 4} width="8" height="8" fill="yellow" stroke="orange" strokeWidth="1" className="cursor-nwse-resize" onPointerDown={(e) => onDown(e, i, 'rxy')} />
-                                                <line x1={cx} y1={cy - rys} x2={cx} y2={rotHandleY} stroke="cyan" strokeWidth="1" strokeDasharray="3,2" />
-                                                <circle cx={cx} cy={rotHandleY} r="5" fill="cyan" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'rotation')} />
-                                                <line x1={cx} y1={cy} x2={sx * 0.6 + cx * 0.4} y2={sy * 0.6 + cy * 0.4} stroke="green" strokeWidth="1" strokeDasharray="3,2" />
-                                                <line x1={cx} y1={cy} x2={ex * 0.6 + cx * 0.4} y2={ey * 0.6 + cy * 0.4} stroke="purple" strokeWidth="1" strokeDasharray="3,2" />
-                                                <circle cx={sx * 0.6 + cx * 0.4} cy={sy * 0.6 + cy * 0.4} r="5" fill="green" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'startAngle')} />
-                                                <circle cx={ex * 0.6 + cx * 0.4} cy={ey * 0.6 + cy * 0.4} r="5" fill="purple" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'endAngle')} />
-                                            </g>
-                                        );
-                                    })()}
-                                    {isSelected && s.type === 'polygon' && s.points.map((p, pid) => (
-                                        <React.Fragment key={pid}>
-                                            <circle cx={p.x * BASE_SCALE} cy={p.y * BASE_SCALE} r="5" fill={selectedPointIndex === pid ? "red" : "white"} stroke="blue" strokeWidth="2" className="cursor-crosshair" onPointerDown={(e) => onDown(e, i, pid)} />
-                                            {p.handles && p.handles.map((h, hid) => (
-                                                <React.Fragment key={`h-${pid}-${hid}`}>
-                                                    <line x1={p.x * BASE_SCALE} y1={p.y * BASE_SCALE} x2={h.x * BASE_SCALE} y2={h.y * BASE_SCALE} stroke="orange" strokeWidth="1" strokeDasharray="3,2" />
-                                                    <rect x={h.x * BASE_SCALE - 4} y={h.y * BASE_SCALE - 4} width="8" height="8" fill="orange" stroke="darkorange" strokeWidth="1" className="cursor-move" onPointerDown={(e) => onDown(e, i, pid, null, hid)} />
-                                                </React.Fragment>
-                                            ))}
-                                        </React.Fragment>
-                                    ))}
-                                    {isSelected && s.type === 'polygon' && (() => {
-                                        const maxX = Math.max(...s.points.map(p => p.x));
-                                        const minY = Math.min(...s.points.map(p => p.y));
-                                        return (
-                                            <g transform={`translate(${maxX * BASE_SCALE + 10}, ${minY * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(i)}>
-                                                <circle r="8" fill="red" />
-                                                <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
-                                            </g>
-                                        );
-                                    })()}
-                                    {isSelected && (s.type === 'circle' || s.type === 'rect') && (
-                                        <g>
-                                            <rect x={(s.x + s.w - 5 / BASE_SCALE) * BASE_SCALE} y={(s.y + s.h - 5 / BASE_SCALE) * BASE_SCALE} width="10" height="10" fill="yellow" stroke="blue" strokeWidth="2" className="cursor-nwse-resize" onPointerDown={(e) => onDown(e, i, null, 'both')} />
-                                            <rect x={(s.x + s.w - 5 / BASE_SCALE) * BASE_SCALE} y={(s.y + s.h / 2 - 5 / BASE_SCALE) * BASE_SCALE} width="10" height="10" fill="lightblue" stroke="blue" strokeWidth="2" className="cursor-ew-resize" onPointerDown={(e) => onDown(e, i, null, 'horizontal')} />
-                                            <rect x={(s.x + s.w / 2 - 5 / BASE_SCALE) * BASE_SCALE} y={(s.y + s.h - 5 / BASE_SCALE) * BASE_SCALE} width="10" height="10" fill="lightgreen" stroke="blue" strokeWidth="2" className="cursor-ns-resize" onPointerDown={(e) => onDown(e, i, null, 'vertical')} />
-                                            <g transform={`translate(${(s.x + s.w) * BASE_SCALE + 10}, ${s.y * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(i)}>
-                                                <circle r="8" fill="red" />
-                                                <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
-                                            </g>
-                                        </g>
-                                    )}
-                                    {/* Dimensions */}
-                                    {isSelected && (() => {
-                                        const fontSize = 12; const textFill = "blue"; const strokeColor = "blue"; const strokeWidth = 1; const offset = 15;
-                                        if (s.type === 'circle' && (s.w || s.h)) {
-                                            const cx = (s.x + s.w / 2) * BASE_SCALE; const cy = (s.y + s.h / 2) * BASE_SCALE; const r = (s.w / 2);
-                                            return (<g pointerEvents="none"><line x1={cx} y1={cy} x2={cx + s.w * BASE_SCALE / 2} y2={cy} stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray="2,2" /><text x={cx + s.w * BASE_SCALE / 4} y={cy - 5} fill={textFill} fontSize={fontSize} textAnchor="middle">r: {Math.round(r)}</text></g>);
-                                        } else if (s.type === 'ellipse' && (s.rx || s.ry)) {
-                                            const cx = (s.cx || 0) * BASE_SCALE; const cy = (s.cy || 0) * BASE_SCALE; const rx = s.rx || 50; const ry = s.ry || 50;
-                                            return (<g pointerEvents="none" transform={rotateTransform}><line x1={cx} y1={cy} x2={cx + rx * BASE_SCALE} y2={cy} stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray="2,2" /><text x={cx + rx * BASE_SCALE / 2} y={cy - 5} fill={textFill} fontSize={fontSize} textAnchor="middle">rx: {Math.round(rx)}</text><line x1={cx} y1={cy} x2={cx} y2={cy + ry * BASE_SCALE} stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray="2,2" /><text x={cx + 5} y={cy + ry * BASE_SCALE / 2} fill={textFill} fontSize={fontSize} textAnchor="start" dominantBaseline="middle">ry: {Math.round(ry)}</text></g>);
-                                        } else if (s.type === 'polygon' && s.points) {
-                                            return (<g pointerEvents="none">{s.points.map((p, idx) => { const nextP = s.points[(idx + 1) % s.points.length]; const mx = ((p.x + nextP.x) / 2) * BASE_SCALE; const my = ((p.y + nextP.y) / 2) * BASE_SCALE; const dist = Math.sqrt(Math.pow(nextP.x - p.x, 2) + Math.pow(nextP.y - p.y, 2)); return (<text key={idx} x={mx} y={my} fill={textFill} fontSize={fontSize} textAnchor="middle" dominantBaseline="middle" stroke="white" strokeWidth="3" paintOrder="stroke">{Math.round(dist)}</text>); })}</g>);
-                                        } else {
-                                            const x = (s.x || 0) * BASE_SCALE; const y = (s.y || 0) * BASE_SCALE; const w = (s.w || 0); const h = (s.h || 0);
-                                            return (<g pointerEvents="none"><line x1={x} y1={y - offset} x2={x + w * BASE_SCALE} y2={y - offset} stroke={strokeColor} strokeWidth={strokeWidth} markerEnd="url(#arrow)" markerStart="url(#arrow)" /><text x={x + w * BASE_SCALE / 2} y={y - offset - 5} fill={textFill} fontSize={fontSize} textAnchor="middle">{Math.round(w)}</text><line x1={x - offset} y1={y} x2={x - offset} y2={y + h * BASE_SCALE} stroke={strokeColor} strokeWidth={strokeWidth} markerEnd="url(#arrow)" markerStart="url(#arrow)" /><text x={x - offset - 5} y={y + h * BASE_SCALE / 2} fill={textFill} fontSize={fontSize} textAnchor="end" dominantBaseline="middle">{Math.round(h)}</text></g>);
+    return (
+        <div className="w-full h-full absolute top-0 left-0 overflow-auto canvas-scroll pt-5 pl-5"
+            onPointerDown={e => onDown(e, null)}
+            onPointerMove={onMove}
+            onPointerUp={onUp}
+            ref={svgRef}
+        >
+            <svg width="3000" height="3000" style={{ minWidth: '3000px', minHeight: '3000px' }}>
+                <g transform={`translate(${viewState.x}, ${viewState.y}) scale(${viewState.scale})`}>
+                    <line x1="-5000" y1="0" x2="5000" y2="0" stroke="#ccc" strokeWidth="2" />
+                    <line x1="0" y1="-5000" x2="0" y2="5000" stroke="#ccc" strokeWidth="2" />
+                    <circle cx="0" cy="0" r="5" fill="red" opacity="0.5" />
+                    {asset && (
+                        <g>
+                            <rect x={asset.boundX * BASE_SCALE || 0} y={asset.boundY * BASE_SCALE || 0} width={asset.w * BASE_SCALE} height={asset.h * BASE_SCALE} fill="none" stroke="blue" strokeWidth="1" strokeDasharray="4 2" opacity="0.3" pointerEvents="none" />
+
+                            {shapes.map((s, i) => {
+                                const isSelected = selectedShapeIndices.includes(i);
+                                const style = { fill: s.color || asset.color, stroke: isSelected ? "#3b82f6" : "#999", strokeWidth: isSelected ? 2 : 1, cursor: 'move' };
+                                const rot = s.rotation || 0;
+                                const rotateTransform = rot && s.type === 'ellipse' ? `rotate(${rot} ${(s.cx || 0) * BASE_SCALE} ${(s.cy || 0) * BASE_SCALE})` : '';
+                                return (
+                                    <g key={i} onPointerDown={(e) => onDown(e, i)}>
+                                        {s.type === 'circle'
+                                            ? <ellipse cx={(s.x + s.w / 2) * BASE_SCALE} cy={(s.y + s.h / 2) * BASE_SCALE} rx={s.w * BASE_SCALE / 2} ry={s.h * BASE_SCALE / 2} {...style} />
+                                            : s.type === 'ellipse'
+                                                ? <path d={generateEllipsePath(s)} transform={rotateTransform} {...style} />
+                                                : <path d={generateSvgPath(s.points)} {...style} />
                                         }
-                                    })()}
-                                </g>
-                            );
-                        })}
-                    </g>
-                )}
-            </g>
-        </svg>
-        {marquee && (
-            <div style={{ position: 'fixed', left: Math.min(marquee.sx, marquee.ex), top: Math.min(marquee.sy, marquee.ey), width: Math.abs(marquee.ex - marquee.sx), height: Math.abs(marquee.ey - marquee.sy), border: '2px dashed #3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', pointerEvents: 'none', zIndex: 9999 }} />
-        )}
-    </div>
-);
+                                        {isSelected && s.type === 'ellipse' && (() => {
+                                            const cx = (s.cx || 0) * BASE_SCALE;
+                                            const cy = (s.cy || 0) * BASE_SCALE;
+                                            const rxs = (s.rx || 50) * BASE_SCALE;
+                                            const rys = (s.ry || 50) * BASE_SCALE;
+                                            const startAngle = s.startAngle || 0;
+                                            const endAngle = s.endAngle || 360;
+                                            const startRad = startAngle * Math.PI / 180;
+                                            const endRad = endAngle * Math.PI / 180;
+                                            const sx = cx + rxs * Math.cos(startRad);
+                                            const sy = cy + rys * Math.sin(startRad);
+                                            const ex = cx + rxs * Math.cos(endRad);
+                                            const ey = cy + rys * Math.sin(endRad);
+                                            const rotHandleY = cy - rys - 20;
+                                            return (
+                                                <g transform={rotateTransform}>
+                                                    <circle cx={cx} cy={cy} r="6" fill="red" stroke="white" strokeWidth="2" className="cursor-move" />
+                                                    <rect x={cx + rxs - 4} y={cy - 4} width="8" height="8" fill="orange" stroke="white" strokeWidth="1" className="cursor-ew-resize" onPointerDown={(e) => onDown(e, i, 'rx')} />
+                                                    <rect x={cx - 4} y={cy + rys - 4} width="8" height="8" fill="orange" stroke="white" strokeWidth="1" className="cursor-ns-resize" onPointerDown={(e) => onDown(e, i, 'ry')} />
+                                                    <rect x={cx + rxs - 4} y={cy + rys - 4} width="8" height="8" fill="yellow" stroke="orange" strokeWidth="1" className="cursor-nwse-resize" onPointerDown={(e) => onDown(e, i, 'rxy')} />
+                                                    <line x1={cx} y1={cy - rys} x2={cx} y2={rotHandleY} stroke="cyan" strokeWidth="1" strokeDasharray="3,2" />
+                                                    <circle cx={cx} cy={rotHandleY} r="5" fill="cyan" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'rotation')} />
+                                                    <line x1={cx} y1={cy} x2={sx * 0.6 + cx * 0.4} y2={sy * 0.6 + cy * 0.4} stroke="green" strokeWidth="1" strokeDasharray="3,2" />
+                                                    <line x1={cx} y1={cy} x2={ex * 0.6 + cx * 0.4} y2={ey * 0.6 + cy * 0.4} stroke="purple" strokeWidth="1" strokeDasharray="3,2" />
+                                                    <circle cx={sx * 0.6 + cx * 0.4} cy={sy * 0.6 + cy * 0.4} r="5" fill="green" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'startAngle')} />
+                                                    <circle cx={ex * 0.6 + cx * 0.4} cy={ey * 0.6 + cy * 0.4} r="5" fill="purple" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'endAngle')} />
+                                                </g>
+                                            );
+                                        })()}
+                                        {isSelected && s.type === 'polygon' && s.points.map((p, pid) => (
+                                            <React.Fragment key={pid}>
+                                                <circle cx={p.x * BASE_SCALE} cy={p.y * BASE_SCALE} r="5" fill={selectedPointIndex === pid ? "red" : "white"} stroke="blue" strokeWidth="2" className="cursor-crosshair" onPointerDown={(e) => onDown(e, i, pid)} />
+                                                {p.handles && p.handles.map((h, hid) => (
+                                                    <React.Fragment key={`h-${pid}-${hid}`}>
+                                                        <line x1={p.x * BASE_SCALE} y1={p.y * BASE_SCALE} x2={h.x * BASE_SCALE} y2={h.y * BASE_SCALE} stroke="orange" strokeWidth="1" strokeDasharray="3,2" />
+                                                        <rect x={h.x * BASE_SCALE - 4} y={h.y * BASE_SCALE - 4} width="8" height="8" fill="orange" stroke="darkorange" strokeWidth="1" className="cursor-move" onPointerDown={(e) => onDown(e, i, pid, null, hid)} />
+                                                    </React.Fragment>
+                                                ))}
+                                            </React.Fragment>
+                                        ))}
+                                        {isSelected && s.type === 'polygon' && (() => {
+                                            const maxX = Math.max(...s.points.map(p => p.x));
+                                            const minY = Math.min(...s.points.map(p => p.y));
+                                            return (
+                                                <g transform={`translate(${maxX * BASE_SCALE + 10}, ${minY * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(i)}>
+                                                    <circle r="8" fill="red" />
+                                                    <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
+                                                </g>
+                                            );
+                                        })()}
+                                        {isSelected && (s.type === 'circle' || s.type === 'rect') && (
+                                            <g>
+                                                <rect x={(s.x + s.w - 5 / BASE_SCALE) * BASE_SCALE} y={(s.y + s.h - 5 / BASE_SCALE) * BASE_SCALE} width="10" height="10" fill="yellow" stroke="blue" strokeWidth="2" className="cursor-nwse-resize" onPointerDown={(e) => onDown(e, i, null, 'both')} />
+                                                <rect x={(s.x + s.w - 5 / BASE_SCALE) * BASE_SCALE} y={(s.y + s.h / 2 - 5 / BASE_SCALE) * BASE_SCALE} width="10" height="10" fill="lightblue" stroke="blue" strokeWidth="2" className="cursor-ew-resize" onPointerDown={(e) => onDown(e, i, null, 'horizontal')} />
+                                                <rect x={(s.x + s.w / 2 - 5 / BASE_SCALE) * BASE_SCALE} y={(s.y + s.h - 5 / BASE_SCALE) * BASE_SCALE} width="10" height="10" fill="lightgreen" stroke="blue" strokeWidth="2" className="cursor-ns-resize" onPointerDown={(e) => onDown(e, i, null, 'vertical')} />
+                                                <g transform={`translate(${(s.x + s.w) * BASE_SCALE + 10}, ${s.y * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(i)}>
+                                                    <circle r="8" fill="red" />
+                                                    <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
+                                                </g>
+                                            );
+                                        })()}
+                                        {/* Dimensions */}
+                                        {isSelected && (() => {
+                                            const fontSize = 12; const textFill = "blue"; const strokeColor = "blue"; const strokeWidth = 1; const offset = 15;
+                                            if (s.type === 'circle' && (s.w || s.h)) {
+                                                const cx = (s.x + s.w / 2) * BASE_SCALE; const cy = (s.y + s.h / 2) * BASE_SCALE; const r = (s.w / 2);
+                                                return (<g pointerEvents="none"><line x1={cx} y1={cy} x2={cx + s.w * BASE_SCALE / 2} y2={cy} stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray="2,2" /><text x={cx + s.w * BASE_SCALE / 4} y={cy - 5} fill={textFill} fontSize={fontSize} textAnchor="middle">r: {Math.round(r)}</text></g>);
+                                            } else if (s.type === 'ellipse' && (s.rx || s.ry)) {
+                                                const cx = (s.cx || 0) * BASE_SCALE; const cy = (s.cy || 0) * BASE_SCALE; const rx = s.rx || 50; const ry = s.ry || 50;
+                                                return (<g pointerEvents="none" transform={rotateTransform}><line x1={cx} y1={cy} x2={cx + rx * BASE_SCALE} y2={cy} stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray="2,2" /><text x={cx + rx * BASE_SCALE / 2} y={cy - 5} fill={textFill} fontSize={fontSize} textAnchor="middle">rx: {Math.round(rx)}</text><line x1={cx} y1={cy} x2={cx} y2={cy + ry * BASE_SCALE} stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray="2,2" /><text x={cx + 5} y={cy + ry * BASE_SCALE / 2} fill={textFill} fontSize={fontSize} textAnchor="start" dominantBaseline="middle">ry: {Math.round(ry)}</text></g>);
+                                            } else if (s.type === 'polygon' && s.points) {
+                                                return (<g pointerEvents="none">{s.points.map((p, idx) => { const nextP = s.points[(idx + 1) % s.points.length]; const mx = ((p.x + nextP.x) / 2) * BASE_SCALE; const my = ((p.y + nextP.y) / 2) * BASE_SCALE; const dist = Math.sqrt(Math.pow(nextP.x - p.x, 2) + Math.pow(nextP.y - p.y, 2)); return (<text key={idx} x={mx} y={my} fill={textFill} fontSize={fontSize} textAnchor="middle" dominantBaseline="middle" stroke="white" strokeWidth="3" paintOrder="stroke">{Math.round(dist)}</text>); })}</g>);
+                                            } else {
+                                                const x = (s.x || 0) * BASE_SCALE; const y = (s.y || 0) * BASE_SCALE; const w = (s.w || 0); const h = (s.h || 0);
+                                                return (<g pointerEvents="none"><line x1={x} y1={y - offset} x2={x + w * BASE_SCALE} y2={y - offset} stroke={strokeColor} strokeWidth={strokeWidth} markerEnd="url(#arrow)" markerStart="url(#arrow)" /><text x={x + w * BASE_SCALE / 2} y={y - offset - 5} fill={textFill} fontSize={fontSize} textAnchor="middle">{Math.round(w)}</text><line x1={x - offset} y1={y} x2={x - offset} y2={y + h * BASE_SCALE} stroke={strokeColor} strokeWidth={strokeWidth} markerEnd="url(#arrow)" markerStart="url(#arrow)" /><text x={x - offset - 5} y={y + h * BASE_SCALE / 2} fill={textFill} fontSize={fontSize} textAnchor="end" dominantBaseline="middle">{Math.round(h)}</text></g>);
+                                            }
+                                        })()}
+                                    </g>
+                                );
+                            })}
+                        </g>
+                    )}
+                </g>
+            </svg>
+            {marquee && (
+                <div style={{ position: 'fixed', left: Math.min(marquee.sx, marquee.ex), top: Math.min(marquee.sy, marquee.ey), width: Math.abs(marquee.ex - marquee.sx), height: Math.abs(marquee.ey - marquee.sy), border: '2px dashed #3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', pointerEvents: 'none', zIndex: 9999 }} />
+            )}
+        </div>
+    );
+};
 
 export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, setLocalAssets, setGlobalAssets }) => {
     // Select from store
@@ -139,6 +159,12 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
     // Sync from Store -> Local
     const assetFromStore = assets.find(a => a.id === designTargetId);
 
+    // Use ref to keep track of latest local asset for event handlers (to solve stale closure issue)
+    const localAssetRef = useRef(null);
+    useEffect(() => {
+        localAssetRef.current = localAsset;
+    }, [localAsset]);
+
     useEffect(() => {
         if (assetFromStore && dragRef.current.mode === 'idle') {
              setLocalAsset(assetFromStore);
@@ -148,7 +174,8 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
     if (!localAsset) return null;
 
     const updateLocalShapes = (newShapes) => {
-        setLocalAsset(prev => ({ ...prev, shapes: newShapes, isDefaultShape: false }));
+        const updated = { ...localAsset, shapes: newShapes, isDefaultShape: false };
+        setLocalAsset(updated);
     };
 
     const handleDown = (e, shapeIndex = null, pointIndex = null, resizeMode = null, handleIndex = null) => {
@@ -168,40 +195,43 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             return;
         }
 
-        if (resizeMode && shapeIndex !== null) {
+        // Safety check for shapes array
+        const currentShapes = localAsset.shapes || [];
+
+        if (resizeMode && shapeIndex !== null && currentShapes[shapeIndex]) {
             e.stopPropagation();
             setSelectedShapeIndices([shapeIndex]);
             setSelectedPointIndex(null);
-            const shape = localAsset.shapes[shapeIndex];
+            const shape = currentShapes[shapeIndex];
             dragRef.current = { mode: 'resizing', sx: e.clientX, sy: e.clientY, shapeW: shape.w, shapeH: shape.h, shapeX: shape.x || 0, shapeY: shape.y || 0, resizeMode };
             setCursorMode('resizing');
             return;
         }
 
-        if (handleIndex !== null && pointIndex !== null && shapeIndex !== null) {
+        if (handleIndex !== null && pointIndex !== null && shapeIndex !== null && currentShapes[shapeIndex]) {
             e.stopPropagation();
             setSelectedShapeIndices([shapeIndex]);
             setSelectedPointIndex(pointIndex);
-            const shape = localAsset.shapes[shapeIndex];
+            const shape = currentShapes[shapeIndex];
             const handle = shape.points[pointIndex].handles[handleIndex];
             dragRef.current = { mode: 'draggingHandle', sx: e.clientX, sy: e.clientY, handleX: handle.x, handleY: handle.y, handleIndex };
             setCursorMode('draggingHandle');
             return;
         }
 
-        if ((pointIndex === 'startAngle' || pointIndex === 'endAngle') && shapeIndex !== null) {
+        if ((pointIndex === 'startAngle' || pointIndex === 'endAngle') && shapeIndex !== null && currentShapes[shapeIndex]) {
             e.stopPropagation();
             setSelectedShapeIndices([shapeIndex]);
-            const shape = localAsset.shapes[shapeIndex];
+            const shape = currentShapes[shapeIndex];
             dragRef.current = { mode: 'draggingAngle', targetProp: pointIndex, cx: (shape.cx || 0) * viewState.scale * BASE_SCALE + viewState.x + rect.left, cy: (shape.cy || 0) * viewState.scale * BASE_SCALE + viewState.y + rect.top };
             setCursorMode('draggingAngle');
             return;
         }
 
-        if (pointIndex === 'rotation' && shapeIndex !== null) {
+        if (pointIndex === 'rotation' && shapeIndex !== null && currentShapes[shapeIndex]) {
             e.stopPropagation();
             setSelectedShapeIndices([shapeIndex]);
-            const shape = localAsset.shapes[shapeIndex];
+            const shape = currentShapes[shapeIndex];
             let cx = (shape.x || 0) + (shape.w || 0) / 2;
             let cy = (shape.y || 0) + (shape.h || 0) / 2;
             if (shape.type === 'ellipse' || shape.type === 'arc') { cx = shape.cx || 0; cy = shape.cy || 0; }
@@ -212,20 +242,20 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             return;
         }
 
-        if ((pointIndex === 'rx' || pointIndex === 'ry') && shapeIndex !== null) {
+        if ((pointIndex === 'rx' || pointIndex === 'ry') && shapeIndex !== null && currentShapes[shapeIndex]) {
             e.stopPropagation();
             setSelectedShapeIndices([shapeIndex]);
-            const shape = localAsset.shapes[shapeIndex];
+            const shape = currentShapes[shapeIndex];
             dragRef.current = { mode: 'draggingRadius', targetProp: pointIndex, sx: e.clientX, sy: e.clientY, initialVal: shape[pointIndex] || 50 };
             setCursorMode('ew-resize');
             return;
         }
 
-        if (pointIndex !== null && shapeIndex !== null) {
+        if (pointIndex !== null && shapeIndex !== null && currentShapes[shapeIndex]) {
             e.stopPropagation();
             setSelectedShapeIndices([shapeIndex]);
             setSelectedPointIndex(pointIndex);
-            const shape = localAsset.shapes[shapeIndex];
+            const shape = currentShapes[shapeIndex];
             const pt = shape.points[pointIndex];
             dragRef.current = { mode: 'draggingPoint', sx: e.clientX, sy: e.clientY, pointX: pt.x, pointY: pt.y };
             setCursorMode('draggingPoint');
@@ -246,9 +276,9 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
                 }
             }
             if (newSelectedIndices.length === 0) return;
-            const initialShapes = newSelectedIndices.map(i => ({ index: i, data: JSON.parse(JSON.stringify(localAsset.shapes[i])) }));
+            const initialShapes = newSelectedIndices.map(i => ({ index: i, data: JSON.parse(JSON.stringify(currentShapes[i])) }));
             const anchorIndex = newSelectedIndices[0];
-            const anchorShape = localAsset.shapes[anchorIndex];
+            const anchorShape = currentShapes[anchorIndex];
             const anchorX = anchorShape.x !== undefined ? anchorShape.x : (anchorShape.cx !== undefined ? anchorShape.cx : 0);
             const anchorY = anchorShape.y !== undefined ? anchorShape.y : (anchorShape.cy !== undefined ? anchorShape.cy : 0);
             dragRef.current = { mode: 'draggingShape', sx: e.clientX, sy: e.clientY, initialShapes: initialShapes, anchorX, anchorY };
@@ -264,6 +294,14 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         if (mode === 'idle') return;
         e.preventDefault();
 
+        // Use localAsset directly from state or ref?
+        // Since handleMove updates state, we want to base calculation on LATEST state.
+        // But drag deltas are usually based on INITIAL state + delta (dragRef).
+        // For marquee selection we need current asset shapes.
+        const currentAsset = localAsset; // This is from closure, but since this is a render-based handler it should be fresh enough or we use ref?
+        // Actually drag operations use dragRef.current.initialShapes so they are safe from stale state regarding start position.
+        // Marquee needs current shapes positions.
+
         if (mode === 'panning') {
             const dx = e.clientX - dragRef.current.sx;
             const dy = e.clientY - dragRef.current.sy;
@@ -278,7 +316,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
                 const p2 = toWorld(e.clientX, e.clientY);
                 const minX = Math.min(p1.x, p2.x); const maxX = Math.max(p1.x, p2.x);
                 const minY = Math.min(p1.y, p2.y); const maxY = Math.max(p1.y, p2.y);
-                const inBoxIndices = localAsset.shapes.map((s, i) => {
+                const inBoxIndices = (currentAsset.shapes || []).map((s, i) => {
                     let cx, cy;
                     if (s.type === 'polygon' && s.points) {
                         const xs = s.points.map(p => p.x); const ys = s.points.map(p => p.y);
@@ -293,7 +331,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         } else if (mode === 'resizing' && selectedShapeIndices.length > 0) {
             const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
             const dy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
-            const newShapes = [...localAsset.shapes];
+            const newShapes = [...currentAsset.shapes];
             const targetIdx = selectedShapeIndices[0];
             const targetShape = newShapes[targetIdx];
             const resizeMode = dragRef.current.resizeMode;
@@ -313,13 +351,13 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             const rawDx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
             const rawDy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
             let moveX = rawDx; let moveY = rawDy;
-            if (localAsset.snap && !e.shiftKey) {
+            if (currentAsset.snap && !e.shiftKey) {
                 const anchorX = dragRef.current.anchorX || 0; const anchorY = dragRef.current.anchorY || 0;
                 const targetX = anchorX + rawDx; const targetY = anchorY + rawDy;
                 const snappedX = Math.round(targetX / SNAP_UNIT) * SNAP_UNIT; const snappedY = Math.round(targetY / SNAP_UNIT) * SNAP_UNIT;
                 moveX = snappedX - anchorX; moveY = snappedY - anchorY;
             }
-            const newShapes = [...localAsset.shapes];
+            const newShapes = [...currentAsset.shapes];
             const initialShapes = dragRef.current.initialShapes || [];
             initialShapes.forEach(({ index, data }) => {
                 let updatedShape = { ...newShapes[index] };
@@ -334,7 +372,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         } else if (mode === 'draggingPoint' && selectedShapeIndices.length > 0 && selectedPointIndex !== null) {
             const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
             const dy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
-            const newShapes = [...localAsset.shapes];
+            const newShapes = [...currentAsset.shapes];
             const targetIdx = selectedShapeIndices[0];
             const pts = [...newShapes[targetIdx].points];
             let nx = dragRef.current.pointX + dx; let ny = dragRef.current.pointY + dy;
@@ -350,7 +388,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         } else if (mode === 'draggingHandle' && selectedShapeIndices.length > 0 && selectedPointIndex !== null) {
             const dx = (e.clientX - dragRef.current.sx) / viewState.scale / BASE_SCALE;
             const dy = (e.clientY - dragRef.current.sy) / viewState.scale / BASE_SCALE;
-            const newShapes = [...localAsset.shapes];
+            const newShapes = [...currentAsset.shapes];
             const targetIdx = selectedShapeIndices[0];
             const pts = [...newShapes[targetIdx].points];
             const pt = { ...pts[selectedPointIndex] };
@@ -363,7 +401,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             const angle = Math.atan2(e.clientY - dragRef.current.cy, e.clientX - dragRef.current.cx) * 180 / Math.PI;
             const deg = (angle + 360) % 360;
             const snapped = e.shiftKey ? deg : Math.round(deg / 15) * 15;
-            const newShapes = [...localAsset.shapes];
+            const newShapes = [...currentAsset.shapes];
             newShapes[targetIdx][dragRef.current.targetProp] = snapped;
             updateLocalShapes(newShapes);
         } else if (mode === 'draggingRotation' && selectedShapeIndices.length > 0) {
@@ -372,7 +410,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             const delta = currentAngle - dragRef.current.startAngle;
             let newRot = (dragRef.current.initialRotation + delta + 360) % 360;
             if (!e.shiftKey) newRot = Math.round(newRot / 15) * 15;
-            const newShapes = [...localAsset.shapes];
+            const newShapes = [...currentAsset.shapes];
             newShapes[targetIdx].rotation = newRot;
             updateLocalShapes(newShapes);
         } else if (mode === 'draggingRadius' && selectedShapeIndices.length > 0) {
@@ -382,7 +420,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             let newVal = dragRef.current.initialVal + dx;
             if (!e.shiftKey) newVal = Math.round(newVal / SNAP_UNIT) * SNAP_UNIT;
             newVal = Math.max(1, newVal);
-            const newShapes = [...localAsset.shapes];
+            const newShapes = [...currentAsset.shapes];
             newShapes[targetIdx][dragRef.current.targetProp] = newVal;
             updateLocalShapes(newShapes);
         }
@@ -393,7 +431,9 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         setCursorMode('idle');
 
         // COMMIT to STORE
-        let finalAsset = { ...localAsset };
+        // Use localAssetRef to get the LATEST state including the last drag update
+        let finalAsset = { ...localAssetRef.current };
+
         if (dragRef.current.mode !== 'idle' && dragRef.current.mode !== 'marquee' && dragRef.current.mode !== 'panning') {
              const shapes = finalAsset.shapes || [];
              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -436,9 +476,31 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         setSelectedShapeIndices([]);
     };
 
+    // Safe shapes access
     const shapes = (localAsset && localAsset.shapes && localAsset.shapes.length > 0)
         ? localAsset.shapes
-        : (localAsset ? [{ type: localAsset.shape || 'rect', w: localAsset.w, h: localAsset.h, x: 0, y: 0, color: localAsset.color, points: localAsset.points || createRectPath(localAsset.w, localAsset.h) }] : []);
+        : (localAsset ? [{
+            type: localAsset.shape || 'rect',
+            w: localAsset.w,
+            h: localAsset.h,
+            x: 0,
+            y: 0,
+            color: localAsset.color,
+            points: localAsset.points || createRectPath(localAsset.w, localAsset.h)
+          }] : []);
 
-    return <DesignCanvasRender viewState={viewState} asset={localAsset} shapes={shapes} selectedShapeIndices={selectedShapeIndices} selectedPointIndex={selectedPointIndex} onDown={handleDown} onMove={handleMove} onUp={handleUp} onDeleteShape={handleDeleteShape} svgRef={svgRef} marquee={marquee} />;
+    return <DesignCanvasRender
+        viewState={viewState}
+        asset={localAsset}
+        shapes={shapes}
+        selectedShapeIndices={selectedShapeIndices}
+        selectedPointIndex={selectedPointIndex}
+        onDown={handleDown}
+        onMove={handleMove}
+        onUp={handleUp}
+        onDeleteShape={handleDeleteShape}
+        svgRef={svgRef}
+        marquee={marquee}
+        cursorMode={cursorMode}
+    />;
 };
