@@ -12,6 +12,7 @@ const App = () => {
     const setProjects = useStore(state => state.setProjects);
     const setGlobalAssets = useStore(state => state.setGlobalAssets);
     const setColorPalette = useStore(state => state.setColorPalette);
+    const setDefaultColors = useStore(state => state.setDefaultColors);
 
     // --- Effects ---
 
@@ -21,7 +22,7 @@ const App = () => {
         API.getAssets().then(assets => setGlobalAssets((assets || []).map(a => ({ ...a, source: 'global' }))));
         API.getPalette().then(data => {
             if (data?.colors) setColorPalette(data.colors);
-            if (data?.defaults) useStore.setState({ defaultColors: data.defaults });
+            if (data?.defaults) setDefaultColors(data.defaults);
         });
     }, []);
 
