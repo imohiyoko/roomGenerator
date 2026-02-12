@@ -9,9 +9,8 @@ export const useNumberInputScroll = (ref, onChange) => {
         if (!element) return;
 
         const handleWheel = (e) => {
-            // Only work if focused
-            if (document.activeElement !== element) return;
-
+            // Hover-based scroll behavior (like Blender/CAD)
+            // Always prevent default page scroll when hovering
             e.preventDefault();
 
             // Calculate step
