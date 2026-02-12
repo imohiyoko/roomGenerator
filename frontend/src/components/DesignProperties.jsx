@@ -2,8 +2,15 @@ import React from 'react';
 import { Icon, Icons } from './Icon';
 import { ColorPicker } from './ColorPicker';
 import { fromMM, toMM, createRectPath, createTrianglePath, deepClone } from '../lib/utils';
+import { useStore } from '../lib/store';
 
-export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, selectedShapeIndices, setSelectedShapeIndices, selectedPointIndex, setSelectedPointIndex, setDesignTargetId, palette, onAddToPalette, defaultColors }) => {
+export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, setDesignTargetId, palette, onAddToPalette, defaultColors }) => {
+    // Select state from store
+    const selectedShapeIndices = useStore(state => state.selectedShapeIndices);
+    const setSelectedShapeIndices = useStore(state => state.setSelectedShapeIndices);
+    const selectedPointIndex = useStore(state => state.selectedPointIndex);
+    const setSelectedPointIndex = useStore(state => state.setSelectedPointIndex);
+
     const asset = assets.find(a => a.id === designTargetId);
 
     // 未選択時

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useStore as useVanillaStore } from 'zustand';
 import { API } from './lib/api';
 import { Icon, Icons } from './components/Icon';
 import { UnifiedSidebar } from './components/UnifiedSidebar';
@@ -62,8 +63,9 @@ const App = () => {
     const addInstance = useStore(state => state.addInstance);
     const addText = useStore(state => state.addText);
 
-    // Undo/Redo
-    const { undo, redo, pastStates, futureStates } = useStore.temporal((state) => state);
+    // Undo/Redo - Fixed usage of zundo temporal store with React
+    // useStore.temporal is a vanilla store, so we wrap it with zustand's useStore to make it reactive
+    const { undo, redo, pastStates, futureStates } = useVanillaStore(useStore.temporal, (state) => state);
 
     // --- Effects ---
 

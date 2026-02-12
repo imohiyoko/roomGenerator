@@ -32,7 +32,7 @@ export const useStore = create(
             // --- Actions ---
 
             // Project Management
-            setProjects: (projects) => set({ projects }),
+            setProjects: (updater) => set((state) => ({ projects: typeof updater === 'function' ? updater(state.projects) : updater })),
             setCurrentProjectId: (id) => set({ currentProjectId: id }),
             setView: (view) => set({ view }),
             setMode: (mode) => set({ mode }),
@@ -46,9 +46,9 @@ export const useStore = create(
             setInstances: (updater) => set((state) => ({ instances: typeof updater === 'function' ? updater(state.instances) : updater })),
 
             // Selection
-            setSelectedIds: (ids) => set({ selectedIds: ids }),
+            setSelectedIds: (updater) => set((state) => ({ selectedIds: typeof updater === 'function' ? updater(state.selectedIds) : updater })),
             setDesignTargetId: (id) => set({ designTargetId: id }),
-            setSelectedShapeIndices: (indices) => set({ selectedShapeIndices: indices }),
+            setSelectedShapeIndices: (updater) => set((state) => ({ selectedShapeIndices: typeof updater === 'function' ? updater(state.selectedShapeIndices) : updater })),
             setSelectedPointIndex: (index) => set({ selectedPointIndex: index }),
 
             // Palette & Defaults

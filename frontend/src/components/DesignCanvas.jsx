@@ -111,8 +111,8 @@ const DesignCanvasRender = ({ viewState, asset, shapes, selectedShapeIndices, se
                                                     <circle r="8" fill="red" />
                                                     <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
                                                 </g>
-                                            );
-                                        })()}
+                                            </g> // Fixed: Was missing closing </g>
+                                        )}
                                         {/* Dimensions */}
                                         {isSelected && (() => {
                                             const fontSize = 12; const textFill = "blue"; const strokeColor = "blue"; const strokeWidth = 1; const offset = 15;
