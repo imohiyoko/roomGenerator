@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { API } from './lib/api';
 import { BASE_SCALE } from './lib/constants';
 import { deepClone } from './lib/utils';
@@ -11,70 +11,114 @@ import { DesignProperties } from './components/DesignProperties';
 import { ProjectCard } from './components/ProjectCard';
 import { Ruler } from './components/Ruler';
 import { ColorPicker } from './components/ColorPicker';
+import { useStore } from './lib/store';
 
 const App = () => {
-    const [projects, setProjects] = useState([]);
-    const [currentProjectId, setCurrentProjectId] = useState(null);
-    const [view, setView] = useState('home'); // 'home', 'project', 'library'
-    const [mode, setMode] = useState('layout'); // 'layout', 'design'
-    const [viewState, setViewState] = useState({ x: 50, y: 50, scale: 1 });
-    const [localAssets, setLocalAssets] = useState([]);
-    const [globalAssets, setGlobalAssets] = useState([]);
-    const [instances, setInstances] = useState([]);
+    // --- Store Selectors ---
+    const projects = useStore(state => state.projects);
+    const setProjects = useStore(state => state.setProjects);
 
-    const [selectedIds, setSelectedIds] = useState([]);
-    const [designTargetId, setDesignTargetId] = useState(null);
-    const [selectedShapeIndices, setSelectedShapeIndices] = useState([]);
-    const [selectedPointIndex, setSelectedPointIndex] = useState(null);
-    const [colorPalette, setColorPalette] = useState([]);
-    const [defaultColors, setDefaultColors] = useState({ room: '#fdfcdc', furniture: '#8fbc8f', fixture: '#cccccc' });
+    const currentProjectId = useStore(state => state.currentProjectId);
+    const setCurrentProjectId = useStore(state => state.setCurrentProjectId);
 
-    // パレットに色を追加
-    const addToPalette = (color) => {
-        if (!colorPalette.includes(color)) {
-            const newPalette = [...colorPalette, color];
-            setColorPalette(newPalette);
-            API.savePalette({ colors: newPalette, defaults: defaultColors });
-        }
-    };
+    const view = useStore(state => state.view);
+    const setView = useStore(state => state.setView);
 
-    // デフォルト色を更新
-    const handleUpdateDefaultColor = (type, color) => {
-        const newDefaults = { ...defaultColors, [type]: color };
-        setDefaultColors(newDefaults);
-        API.savePalette({ colors: colorPalette, defaults: newDefaults });
+    const mode = useStore(state => state.mode);
+    const setMode = useStore(state => state.setMode);
 
-        // isDefaultShape: true のアセットを一括更新
-        const updateAssets = (assets) => assets.map(a => {
-            if (a.isDefaultShape && a.type === type) {
-                const newShapes = (a.shapes || []).map(s => ({ ...s, color: color }));
-                return { ...a, color: color, shapes: newShapes };
-            }
-            return a;
-        });
+    const viewState = useStore(state => state.viewState);
+    const setViewState = useStore(state => state.setViewState);
 
-        setLocalAssets(prev => updateAssets(prev));
-        setGlobalAssets(prev => updateAssets(prev));
-    };
+    const localAssets = useStore(state => state.localAssets);
+    const setLocalAssets = useStore(state => state.setLocalAssets);
 
-    // 初期ロード
+    const globalAssets = useStore(state => state.globalAssets);
+    const setGlobalAssets = useStore(state => state.setGlobalAssets);
+
+    const instances = useStore(state => state.instances);
+    const setInstances = useStore(state => state.setInstances);
+
+    const selectedIds = useStore(state => state.selectedIds);
+    const setSelectedIds = useStore(state => state.setSelectedIds);
+
+    const designTargetId = useStore(state => state.designTargetId);
+    const setDesignTargetId = useStore(state => state.setDesignTargetId);
+
+    const selectedShapeIndices = useStore(state => state.selectedShapeIndices);
+    const setSelectedShapeIndices = useStore(state => state.setSelectedShapeIndices);
+    const selectedPointIndex = useStore(state => state.selectedPointIndex);
+    const setSelectedPointIndex = useStore(state => state.setSelectedPointIndex);
+
+    const colorPalette = useStore(state => state.colorPalette);
+    const defaultColors = useStore(state => state.defaultColors);
+
+    // Actions
+    const updateDefaultColor = useStore(state => state.updateDefaultColor);
+    const addToPalette = useStore(state => state.addToPalette);
+    const removeFromPalette = useStore(state => state.removeFromPalette);
+    const setColorPalette = useStore(state => state.setColorPalette);
+
+    const loadProject = useStore(state => state.loadProject);
+    const saveProjectData = useStore(state => state.saveProjectData);
+    const addInstance = useStore(state => state.addInstance);
+    const addText = useStore(state => state.addText);
+
+    // Undo/Redo
+    const { undo, redo, pastStates, futureStates } = useStore.temporal((state) => state);
+
+    // --- Effects ---
+
+    // Initial Load
     useEffect(() => {
         API.getProjects().then(setProjects);
-        // グローバルアセットにsource: 'global'を付与
         API.getAssets().then(assets => setGlobalAssets((assets || []).map(a => ({ ...a, source: 'global' }))));
-        // カラーパレットとデフォルト色を読み込み
         API.getPalette().then(data => {
             if (data?.colors) setColorPalette(data.colors);
-            if (data?.defaults) setDefaultColors(data.defaults);
+            if (data?.defaults) useStore.setState({ defaultColors: data.defaults });
         });
     }, []);
 
-    // キーボードパン（WASD / 矢印キー）
+    // Load Project Data when ID changes
+    useEffect(() => {
+        if (currentProjectId) {
+            loadProject(currentProjectId);
+        } else {
+            setView('home');
+        }
+    }, [currentProjectId]);
+
+    // Auto-Save (Debounced)
+    useEffect(() => {
+        if (!currentProjectId) return;
+        const timer = setTimeout(() => {
+            saveProjectData();
+        }, 1000);
+        return () => clearTimeout(timer);
+    }, [localAssets, instances, currentProjectId]);
+
+
+    // Keyboard Pan (WASD / Arrows)
     useEffect(() => {
         const PAN_STEP = 50;
         const handleKeyDown = (e) => {
-            // 入力フィールドにフォーカスがある場合は無視
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+            // Undo/Redo Shortcuts
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    redo();
+                } else {
+                    undo();
+                }
+                return;
+            }
+             if ((e.ctrlKey || e.metaKey) && e.key === 'y') { // Windows Redo Standard
+                e.preventDefault();
+                redo();
+                return;
+            }
 
             let dx = 0, dy = 0;
             switch (e.key.toLowerCase()) {
@@ -91,116 +135,29 @@ const App = () => {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
+    }, [undo, redo]);
 
-    // 数値入力のホイール操作
+    // Number Input Wheel
     useEffect(() => {
         const handleWheel = (e) => {
             if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
                 e.preventDefault();
                 const step = e.shiftKey ? 1000 : 10;
                 const delta = e.deltaY < 0 ? step : -step;
-                const currentValue = parseFloat(e.target.value) || 0;
-                const newValue = currentValue + delta;
             }
         };
         window.addEventListener('wheel', handleWheel, { passive: false });
         return () => window.removeEventListener('wheel', handleWheel);
     }, []);
 
-    useEffect(() => {
-        if (!currentProjectId) {
-            setView('home');
-            return;
-        }
-        setView('project');
-        API.getProjectData(currentProjectId).then(data => {
-            let loadedAssets = data?.assets || [];
 
-            // プロジェクトが空の場合のみ、グローバルアセットを初期ロード（自動フォーク）
-            if (loadedAssets.length === 0) {
-                const forkedAssets = globalAssets.map(ga => {
-                    const clone = deepClone(ga);
-                    clone.id = `a-fork-${ga.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-                    delete clone.source;
-                    // デフォルト形状フラグを維持 (存在する場合)
-                    if (ga.isDefaultShape) clone.isDefaultShape = true;
-                    // ロード時に色を最新のデフォルトに同期
-                    if (clone.isDefaultShape && defaultColors[clone.type]) {
-                        const color = defaultColors[clone.type];
-                        clone.color = color;
-                        clone.shapes = (clone.shapes || []).map(s => ({...s, color}));
-                    }
-                    return clone;
-                });
-                setLocalAssets(forkedAssets);
-            } else {
-                // 既存のローカルアセットロード時も、未編集なら最新のデフォルト色に同期する
-                const syncedAssets = loadedAssets.map(a => {
-                    // defaultColorsがロード済みで、かつ色が異なる場合のみ更新
-                    if (a.isDefaultShape && defaultColors[a.type] && a.color !== defaultColors[a.type]) {
-                        const color = defaultColors[a.type];
-                        // 参照を切るためにクローンしてから変更
-                        const updated = { ...a, color: color };
-                        updated.shapes = (a.shapes || []).map(s => ({ ...s, color: color }));
-                        return updated;
-                    }
-                    return a;
-                });
-                setLocalAssets(syncedAssets);
-            }
-
-            setInstances(data?.instances || []);
-        });
-    }, [currentProjectId, globalAssets]);
-    // defaultColorsを依存配列に含めると、色変更時に再ロードが走るリスクがあるが、
-    // ここはAPI.getProjectDataを呼んでいるため、defaultColorsが変わっただけでリロードするのは非効率＆ループの危険。
-    // 代わりに、defaultColorsが変わった時の同期は handleUpdateDefaultColor で既に行われている。
-    // 問題は「初期ロード時に defaultColors が未完了の場合」だが、
-    // Appの初期ロードでAPI.getPaletteとAPI.getProjectsは並行して走る。
-    // 通常はPaletteが軽いので先に終わるが、保証はない。
-    //
-    // 安全策として、defaultColorsが更新された時にも同期処理を走らせるEffectを追加する。
-
-    useEffect(() => {
-        if (localAssets.length === 0 || Object.keys(defaultColors).length === 0) return;
-
-        let hasChanges = false;
-        const syncedAssets = localAssets.map(a => {
-            if (a.isDefaultShape && defaultColors[a.type] && a.color !== defaultColors[a.type]) {
-                hasChanges = true;
-                const color = defaultColors[a.type];
-                const newShapes = (a.shapes || []).map(s => ({ ...s, color: color }));
-                return { ...a, color: color, shapes: newShapes };
-            }
-            return a;
-        });
-
-        if (hasChanges) {
-            setLocalAssets(syncedAssets);
-        }
-    }, [defaultColors]); // localAssetsを依存に入れるとループするので入れない。defaultColors変更時のみチェック。
-
-
-    // 自動保存 (簡易)
-    useEffect(() => {
-        if (!currentProjectId) return;
-        const timer = setTimeout(() => {
-            // Go struct: ProjectData { LocalAssets, Instances }
-            // JS object keys must match Go struct JSON tags: "assets", "instances"
-            API.saveProjectData(currentProjectId, { assets: localAssets, instances });
-        }, 1000);
-        return () => clearTimeout(timer);
-    }, [localAssets, instances, currentProjectId]);
-
+    // Handlers
     const handleCreateProject = async () => {
-        // Wails doesn't support prompt() natively in some environments without polyfill, but mostly works in WebView2.
-        // If it fails, we might need a custom modal. For now assume it works.
         const name = prompt("プロジェクト名を入力してください", "新規プロジェクト");
         if (!name) return;
         const newProj = await API.createProject(name);
         if (newProj) {
-            setProjects(p => [...p, newProj]);
+            setProjects([...projects, newProj]);
         }
     };
 
@@ -208,83 +165,36 @@ const App = () => {
         e.stopPropagation();
         if (!confirm("このプロジェクトを削除しますか？")) return;
         await API.deleteProject(id);
-        setProjects(p => p.filter(proj => proj.id !== id));
+        setProjects(projects.filter(proj => proj.id !== id));
     };
 
     const handleRenameProject = async (id, name) => {
         await API.updateProjectName(id, name);
-        setProjects(p => p.map(proj => proj.id === id ? { ...proj, name } : proj));
+        setProjects(projects.map(proj => proj.id === id ? { ...proj, name } : proj));
     };
 
+    // Throttled Add Instance
     const lastAddRef = useRef(0);
-
-    const handleAddInstance = (assetId) => {
+    const handleAddInstanceThrottled = (assetId) => {
         const now = Date.now();
-        if (now - lastAddRef.current < 500) return; // Debounce 500ms
+        if (now - lastAddRef.current < 500) return;
         lastAddRef.current = now;
-
-        let asset = [...localAssets, ...globalAssets].find(a => a.id === assetId);
-        let targetAssetId = assetId;
-
-        // グローバルアセットの場合、自動的にローカルコピーを作成
-        if (asset && asset.source === 'global') {
-            const newLocalId = `a-fork-${now}-${Math.floor(Math.random() * 1000)}`;
-            const newLocalAsset = deepClone(asset);
-            newLocalAsset.id = newLocalId;
-            newLocalAsset.name = asset.name;
-            delete newLocalAsset.source;
-            // デフォルト形状フラグを維持
-            if (asset.isDefaultShape) newLocalAsset.isDefaultShape = true;
-            // 同期
-            if (newLocalAsset.isDefaultShape && defaultColors[newLocalAsset.type]) {
-                const color = defaultColors[newLocalAsset.type];
-                newLocalAsset.color = color;
-                newLocalAsset.shapes = (newLocalAsset.shapes || []).map(s => ({...s, color}));
-            }
-
-            setLocalAssets(prev => [...prev, newLocalAsset]);
-            targetAssetId = newLocalId;
-            asset = newLocalAsset;
-        }
-
-        const newInst = {
-            id: `i-${now}-${Math.floor(Math.random() * 1000)}`,
-            assetId: targetAssetId,
-            x: (400 - viewState.x) / viewState.scale / BASE_SCALE,
-            y: (300 - viewState.y) / viewState.scale / BASE_SCALE,
-            rotation: 0,
-            locked: false,
-            type: asset ? asset.type : 'unknown'
-        };
-        setInstances(prev => [...prev, newInst]);
-        setSelectedIds([newInst.id]);
+        addInstance(assetId);
     };
 
-    const handleAddText = () => {
+    const handleAddTextThrottled = () => {
         const now = Date.now();
-        if (now - lastAddRef.current < 500) return; // Debounce 500ms
+        if (now - lastAddRef.current < 500) return;
         lastAddRef.current = now;
-
-        const newInst = {
-            id: `t-${now}-${Math.floor(Math.random() * 1000)}`,
-            type: 'text',
-            text: 'テキスト',
-            fontSize: 24,
-            color: '#333333',
-            x: (400 - viewState.x) / viewState.scale / BASE_SCALE,
-            y: (300 - viewState.y) / viewState.scale / BASE_SCALE,
-            rotation: 0,
-            locked: false
-        };
-        setInstances(prev => [...prev, newInst]);
-        setSelectedIds([newInst.id]);
+        addText();
     };
 
-    // ライブラリ管理画面
+
+    // --- View Rendering ---
+
     if (view === 'library') {
         return (
             <div className="min-h-screen bg-gray-100 overflow-auto">
-                {/* Header */}
                 <div className="bg-white border-b shadow-sm p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <button onClick={() => setView('home')} className="text-gray-500 hover:text-gray-800 flex items-center gap-2">
@@ -295,56 +205,26 @@ const App = () => {
                 </div>
 
                 <div className="max-w-4xl mx-auto p-6 space-y-8">
-                    {/* カラーパレット管理 */}
+                    {/* Palette */}
                     <div className="bg-white rounded-lg shadow p-6">
-                        <h2 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">
-                            🎨 カラーパレット
-                        </h2>
+                        <h2 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">🎨 カラーパレット</h2>
                         <div className="grid grid-cols-10 gap-2 mb-4">
                             {colorPalette.map((color, i) => (
                                 <div key={i} className="relative group">
-                                    <div
-                                        className="w-10 h-10 rounded border-2 border-gray-300"
-                                        style={{ backgroundColor: color }}
-                                        title={color}
-                                    />
-                                    <button
-                                        onClick={() => {
-                                            const newPalette = colorPalette.filter((_, idx) => idx !== i);
-                                            setColorPalette(newPalette);
-                                            API.savePalette({ colors: newPalette, defaults: defaultColors });
-                                        }}
-                                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition"
-                                    >
-                                        ×
-                                    </button>
+                                    <div className="w-10 h-10 rounded border-2 border-gray-300" style={{ backgroundColor: color }} title={color} />
+                                    <button onClick={() => removeFromPalette(i)} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition">×</button>
                                 </div>
                             ))}
-                            {/* 新規色追加 */}
                             <label className="w-10 h-10 rounded border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition">
-                                <input
-                                    type="color"
-                                    className="sr-only"
-                                    onChange={(e) => {
-                                        const newColor = e.target.value;
-                                        if (!colorPalette.includes(newColor)) {
-                                            const newPalette = [...colorPalette, newColor];
-                                            setColorPalette(newPalette);
-                                            API.savePalette({ colors: newPalette, defaults: defaultColors });
-                                        }
-                                    }}
-                                />
+                                <input type="color" className="sr-only" onChange={(e) => addToPalette(e.target.value)} />
                                 <Icon p={Icons.Plus} size={16} className="text-gray-400" />
                             </label>
                         </div>
-                        <p className="text-xs text-gray-400">クリックで削除、+ ボタンで新しい色を追加</p>
                     </div>
 
-                     {/* デフォルト色設定 */}
+                    {/* Default Colors */}
                      <div className="bg-white rounded-lg shadow p-6">
-                        <h2 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">
-                            🖌️ カテゴリ別デフォルト色
-                        </h2>
+                        <h2 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">🖌️ カテゴリ別デフォルト色</h2>
                         <div className="flex gap-8">
                             {[
                                 { type: 'room', label: '部屋・床' },
@@ -355,176 +235,32 @@ const App = () => {
                                     <span className="text-sm font-bold text-gray-600">{label}</span>
                                     <ColorPicker
                                         value={defaultColors[type] || '#cccccc'}
-                                        onChange={(c) => handleUpdateDefaultColor(type, c)}
+                                        onChange={(c) => updateDefaultColor(type, c)}
                                         palette={colorPalette}
                                         onAddToPalette={addToPalette}
                                     />
-                                    <span className="text-xs text-gray-400">{defaultColors[type] || '#cccccc'}</span>
                                 </div>
                             ))}
                         </div>
-                        <p className="text-xs text-gray-400 mt-4">ここで設定した色は、新規作成時の初期色や、未編集のアセットの自動色変更に適用されます。</p>
                     </div>
 
-                    {/* 共通アセット管理 */}
+                    {/* Global Assets */}
                     <div className="bg-white rounded-lg shadow p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-bold text-gray-700 flex items-center gap-2">
-                                📦 共通アセット
-                            </h2>
-                            <button
-                                onClick={async () => {
-                                    try {
-                                        const data = globalAssets.map(a => ({ ...a, source: undefined }));
-                                        await API.saveAssets(data);
-                                        alert('共通アセットを保存しました');
-                                    } catch (e) {
-                                        console.error('Save failed:', e);
-                                        alert('保存に失敗しました: ' + e);
-                                    }
-                                }}
-                                className="text-xs bg-green-50 text-green-600 px-3 py-1 rounded border border-green-200 hover:bg-green-100"
-                            >
-                                変更を保存
-                            </button>
+                         <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-bold text-gray-700 flex items-center gap-2">📦 共通アセット</h2>
+                            <button onClick={async () => {
+                                await API.saveAssets(globalAssets.map(a => ({ ...a, source: undefined })));
+                                alert('保存しました');
+                            }} className="text-xs bg-green-50 text-green-600 px-3 py-1 rounded border border-green-200">変更を保存</button>
                         </div>
-                        <div className="flex gap-6">
-                            {/* アセット一覧 */}
-                            <div className="flex-1">
-                                <div className="grid grid-cols-3 gap-3">
-                                    {globalAssets.map(asset => (
-                                        <div
-                                            key={asset.id}
-                                            onClick={() => setDesignTargetId(designTargetId === asset.id ? null : asset.id)}
-                                            className={`border rounded p-3 relative group cursor-pointer transition ${designTargetId === asset.id
-                                                ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-200'
-                                                : 'bg-gray-50 hover:bg-gray-100'
-                                                }`}
-                                        >
-                                            <div className="w-10 h-10 mx-auto rounded mb-2 border" style={{ backgroundColor: asset.color }} />
-                                            <div className="text-xs font-bold text-gray-700 text-center truncate">{asset.name}</div>
-                                            <div className="text-[10px] text-gray-400 text-center">{asset.type}</div>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (!confirm(`"${asset.name}" を削除しますか？`)) return;
-                                                    const newAssets = globalAssets.filter(a => a.id !== asset.id);
-                                                    setGlobalAssets(newAssets);
-                                                    API.saveAssets(newAssets.map(a => ({ ...a, source: undefined })));
-                                                    if (designTargetId === asset.id) setDesignTargetId(null);
-                                                }}
-                                                className="absolute top-1 right-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1"
-                                            >
-                                                <Icon p={Icons.Trash} size={12} />
-                                            </button>
-                                        </div>
-                                    ))}
+                        <div className="grid grid-cols-6 gap-3">
+                             {globalAssets.map(asset => (
+                                <div key={asset.id} onClick={() => setDesignTargetId(designTargetId === asset.id ? null : asset.id)}
+                                    className={`border rounded p-2 cursor-pointer ${designTargetId === asset.id ? 'ring-2 ring-blue-200' : ''}`}>
+                                    <div className="w-8 h-8 mx-auto rounded mb-1 border" style={{ backgroundColor: asset.color }} />
+                                    <div className="text-[10px] text-center truncate">{asset.name}</div>
                                 </div>
-                                {globalAssets.length === 0 && (
-                                    <div className="text-center py-8 text-gray-400">
-                                        共通アセットはまだありません
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* 編集パネル */}
-                            {designTargetId && (() => {
-                                const editAsset = globalAssets.find(a => a.id === designTargetId);
-                                if (!editAsset) return null;
-                                const updateAsset = (key, value) => {
-                                    const newAssets = globalAssets.map(a => {
-                                        if (a.id !== designTargetId) return a;
-                                        const updates = { [key]: value };
-                                        // 色やサイズを手動変更した場合、デフォルト形状フラグを下ろす
-                                        if (['color', 'w', 'h'].includes(key)) {
-                                            updates.isDefaultShape = false;
-                                        }
-                                        return { ...a, ...updates };
-                                    });
-                                    setGlobalAssets(newAssets);
-                                };
-                                return (
-                                    <div className="w-64 bg-gray-50 border rounded-lg p-4 space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <h3 className="font-bold text-sm text-gray-700">アセット編集</h3>
-                                            <button onClick={() => setDesignTargetId(null)} className="text-gray-400 hover:text-gray-600">×</button>
-                                        </div>
-
-                                        {/* プレビュー */}
-                                        <div className="flex justify-center">
-                                            <div className="w-20 h-20 rounded border-2" style={{ backgroundColor: editAsset.color }} />
-                                        </div>
-
-                                        {/* 名称 */}
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 block mb-1">名称</label>
-                                            <input
-                                                value={editAsset.name}
-                                                onChange={e => updateAsset('name', e.target.value)}
-                                                className="w-full px-2 py-1 border rounded text-sm"
-                                            />
-                                        </div>
-
-                                        {/* 種類 */}
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 block mb-1">種類</label>
-                                            <select
-                                                value={editAsset.type}
-                                                onChange={e => updateAsset('type', e.target.value)}
-                                                className="w-full px-2 py-1 border rounded text-sm"
-                                            >
-                                                <option value="room">部屋・床</option>
-                                                <option value="fixture">設備・建具</option>
-                                                <option value="furniture">家具</option>
-                                            </select>
-                                        </div>
-
-                                        {/* 色 */}
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 block mb-1">色</label>
-                                            <ColorPicker
-                                                value={editAsset.color}
-                                                onChange={c => updateAsset('color', c)}
-                                                palette={colorPalette}
-                                                onAddToPalette={addToPalette}
-                                            />
-                                        </div>
-
-                                        {/* サイズ */}
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div>
-                                                <label className="text-xs font-bold text-gray-500 block mb-1">幅 (mm)</label>
-                                                <input
-                                                    type="number"
-                                                    value={editAsset.w || 100}
-                                                    onChange={e => updateAsset('w', Number(e.target.value))}
-                                                    className="w-full px-2 py-1 border rounded text-sm"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-gray-500 block mb-1">高さ (mm)</label>
-                                                <input
-                                                    type="number"
-                                                    value={editAsset.h || 100}
-                                                    onChange={e => updateAsset('h', Number(e.target.value))}
-                                                    className="w-full px-2 py-1 border rounded text-sm"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* 保存ボタン */}
-                                        <button
-                                            onClick={() => {
-                                                API.saveAssets(globalAssets.map(a => ({ ...a, source: undefined })));
-                                                alert('保存しました');
-                                            }}
-                                            className="w-full bg-blue-600 text-white text-sm py-2 rounded hover:bg-blue-700 transition"
-                                        >
-                                            保存
-                                        </button>
-                                    </div>
-                                );
-                            })()}
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -561,18 +297,21 @@ const App = () => {
 
     return (
         <div className="flex h-screen overflow-hidden">
-            {/* Size: 260px Sidebar */}
+            {/* Sidebar */}
             <div className="w-64 flex-shrink-0 border-r bg-white flex flex-col z-20 shadow-sm">
                 <div className="p-3 border-b flex items-center justify-between bg-gray-50">
                     <button onClick={() => setCurrentProjectId(null)} className="text-gray-500 hover:text-gray-800 p-1 rounded hover:bg-gray-200"><Icon p={Icons.LogOut} /></button>
                     <span className="font-bold text-sm truncate px-2">{activeProject?.name}</span>
-                    <div className="w-6"></div>
+                    <div className="flex gap-1">
+                        <button onClick={() => undo()} disabled={pastStates.length === 0} className={`p-1 rounded ${pastStates.length > 0 ? 'hover:bg-gray-200 text-gray-600' : 'text-gray-300'}`} title="Undo (Ctrl+Z)"><Icon p={Icons.Undo} size={14}/></button>
+                        <button onClick={() => redo()} disabled={futureStates.length === 0} className={`p-1 rounded ${futureStates.length > 0 ? 'hover:bg-gray-200 text-gray-600' : 'text-gray-300'}`} title="Redo (Ctrl+Shift+Z)"><Icon p={Icons.Redo} size={14}/></button>
+                    </div>
                 </div>
                 <UnifiedSidebar
                     mode={mode}
                     assets={localAssets}
-                    onAddInstance={handleAddInstance}
-                    onAddText={handleAddText}
+                    onAddInstance={handleAddInstanceThrottled}
+                    onAddText={handleAddTextThrottled}
                     setLocalAssets={setLocalAssets}
                     setGlobalAssets={setGlobalAssets}
                     setDesignTargetId={setDesignTargetId}
@@ -583,11 +322,11 @@ const App = () => {
                 />
             </div>
 
-            {/* Main Canvas */}
+            {/* Canvas Area */}
             <div className="flex-1 relative bg-gray-100 overflow-hidden relative">
                 <div className={`absolute inset-0 ${mode === 'layout' ? 'grid-bg' : 'design-grid'}`}></div>
 
-                {/* Toolbar - ルーラーの下に配置 */}
+                {/* Toolbar */}
                 <div className="absolute top-6 left-6 z-30 bg-white p-1 rounded shadow-md border flex gap-1">
                     <button onClick={() => setMode('layout')} className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 ${mode === 'layout' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}>
                         <Icon p={Icons.Move} size={14} /> レイアウト
@@ -597,7 +336,7 @@ const App = () => {
                     </button>
                 </div>
 
-                {/* Scale Controls */}
+                {/* Scale */}
                 <div className="absolute bottom-4 left-4 z-30 bg-white p-1 rounded shadow-md border flex gap-1">
                     <button onClick={() => setViewState(p => ({ ...p, scale: p.scale * 1.2 }))} className="p-1.5 rounded hover:bg-gray-100 text-gray-600"><Icon p={Icons.ZoomIn} /></button>
                     <span className="px-2 py-1 text-xs min-w-[3rem] text-center">{Math.round(viewState.scale * 100)}%</span>
@@ -619,13 +358,11 @@ const App = () => {
                         assets={allAssets}
                         designTargetId={designTargetId} setLocalAssets={setLocalAssets}
                         setGlobalAssets={setGlobalAssets}
-                        selectedShapeIndices={selectedShapeIndices} setSelectedShapeIndices={setSelectedShapeIndices}
-                        selectedPointIndex={selectedPointIndex} setSelectedPointIndex={setSelectedPointIndex}
                     />
                 )}
             </div>
 
-            {/* Right Properties Panel */}
+            {/* Properties Panel */}
             <div className="w-72 flex-shrink-0 border-l bg-white z-20 shadow-sm flex flex-col">
                 {mode === 'layout' ? (
                     <LayoutProperties
