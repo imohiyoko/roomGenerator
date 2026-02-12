@@ -432,9 +432,15 @@ const App = () => {
                                 const editAsset = globalAssets.find(a => a.id === designTargetId);
                                 if (!editAsset) return null;
                                 const updateAsset = (key, value) => {
-                                    const newAssets = globalAssets.map(a =>
-                                        a.id === designTargetId ? { ...a, [key]: value } : a
-                                    );
+                                    const newAssets = globalAssets.map(a => {
+                                        if (a.id !== designTargetId) return a;
+                                        const updates = { [key]: value };
+                                        // 色やサイズを手動変更した場合、デフォルト形状フラグを下ろす
+                                        if (['color', 'w', 'h'].includes(key)) {
+                                            updates.isDefaultShape = false;
+                                        }
+                                        return { ...a, ...updates };
+                                    });
                                     setGlobalAssets(newAssets);
                                 };
                                 return (
