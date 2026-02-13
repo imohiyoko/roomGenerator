@@ -58,3 +58,6 @@ wails build
 ## ライセンス
 
 このプロジェクトは [LICENSE](LICENSE) ファイルの条件に従って提供されています。
+
+### 協力
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/imohiyoko/roomGenerator?utm_source=oss&utm_medium=github&utm_campaign=imohiyoko%2FroomGenerator&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
