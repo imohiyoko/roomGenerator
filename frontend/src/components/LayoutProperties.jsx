@@ -2,8 +2,21 @@ import React from 'react';
 import { Icon, Icons } from './Icon';
 import { NumberInput } from './NumberInput';
 import { fromMM, toMM } from '../lib/utils';
+import { useStore } from '../store';
 
-export const LayoutProperties = ({ instances, setInstances, selectedIds, assets, setSelectedIds, setMode, setDesignTargetId }) => {
+export const LayoutProperties = () => {
+    // Select state from store
+    const instances = useStore(state => state.instances);
+    const setInstances = useStore(state => state.setInstances);
+    const selectedIds = useStore(state => state.selectedIds);
+    const setSelectedIds = useStore(state => state.setSelectedIds);
+    const setMode = useStore(state => state.setMode);
+    const setDesignTargetId = useStore(state => state.setDesignTargetId);
+
+    const localAssets = useStore(state => state.localAssets);
+    const globalAssets = useStore(state => state.globalAssets);
+    const assets = [...localAssets, ...globalAssets];
+
     const item = instances.find(i => i.id === selectedIds[0]);
 
     // 未選択時は簡易リスト表示

@@ -12,7 +12,8 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
     const selectedPointIndex = useStore(state => state.selectedPointIndex);
     const setSelectedPointIndex = useStore(state => state.setSelectedPointIndex);
 
-    const asset = assets.find(a => a.id === designTargetId);
+    const allAssets = [...localAssets, ...globalAssets];
+    const asset = allAssets.find(a => a.id === designTargetId);
 
     // 未選択時
     if (!asset) {
