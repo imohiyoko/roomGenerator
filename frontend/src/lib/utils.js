@@ -27,14 +27,14 @@ export const createRectPath = (w, h, x = 0, y = 0) => [
 ];
 
 export const createTrianglePath = (w, h, x = 0, y = 0) => [
-    { x: x + w / 2, y: y + h, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false }, // Top vertex
-    { x: x + w, y: y, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false },     // Bottom Right
-    { x: x, y: y, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false },         // Bottom Left
+    { x: x + w / 2, y: y + h, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false }, // 上部頂点
+    { x: x + w, y: y, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false },     // 右下
+    { x: x, y: y, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false },         // 左下
 ];
 
 export const normalizeAsset = (asset) => {
     if (!asset) return null;
-    let entities = asset.entities || asset.shapes || []; // Fallback to shapes for migration
+    let entities = asset.entities || asset.shapes || []; // 移行用のフォールバックとして shapes を使用
     if (entities.length === 0) {
         if (asset.shape === 'rect' || !asset.shape) {
             entities.push({ type: 'polygon', points: createRectPath(asset.w || 60, asset.h || 60), color: asset.color, layer: 'default' });
@@ -45,8 +45,8 @@ export const normalizeAsset = (asset) => {
             entities.push({ type: 'circle', x: 0, y: 0, w: asset.w || 60, h: asset.h || 60, color: asset.color, layer: 'default' });
         }
     }
-    // Remove old 'shapes' if moving to entities, but for now just ensure entities is populated
-    // We return 'entities' property.
+    // entities に移行する場合は古い 'shapes' を削除しますが、現時点では entities が入力されていることを確認します
+    // 'entities' プロパティを返します
     return { ...asset, entities, shapes: undefined, w: asset.w || 60, h: asset.h || 60 };
 };
 
@@ -66,7 +66,7 @@ export const generateSvgPath = (points) => {
 
         if (handles.length === 0) {
             if (curr.isCurve || next.isCurve) {
-                // Legacy curve support
+                // レガシー曲線サポート
                 const cp1x = tx(curr.x + (curr.h2?.x || 0));
                 const cp1y = ty(curr.y + (curr.h2?.y || 0));
                 const cp2x = tx(next.x + (next.h1?.x || 0));

@@ -6,7 +6,7 @@ import { fromMM, toMM, createRectPath, createTrianglePath, deepClone, calculateA
 import { useStore } from '../store';
 
 export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, setDesignTargetId, palette, onAddToPalette, defaultColors }) => {
-    // Select state from store
+    // ストアから状態を選択
     const selectedShapeIndices = useStore(state => state.selectedShapeIndices);
     const setSelectedShapeIndices = useStore(state => state.setSelectedShapeIndices);
     const selectedPointIndex = useStore(state => state.selectedPointIndex);
@@ -27,7 +27,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
     const isMultiSelect = selectedShapeIndices.length > 1;
     const targetIndex = selectedShapeIndices.length === 1 ? selectedShapeIndices[0] : null;
 
-    // Normalize access to entities
+    // entities へのアクセスを正規化
     const entities = asset.entities || asset.shapes || [];
 
     const selectedEntity = (entities && targetIndex !== null) ? entities[targetIndex] : null;
@@ -137,11 +137,11 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
 
         if (groupMinX === Infinity || groupMinY === Infinity) return;
 
-        // 2. 左上基準でスケーリング (Cartesian: Bottom-Left is MinY)
-        // Wait, scaling logic: usually relative to center or min/min.
-        // If we scale relative to MinX, MinY:
+        // 2. 左上基準でスケーリング (Cartesian: 左下はMinY)
+        // 待って、スケーリングロジック：通常は中心または最小/最小に関連しています。
+        // MinX, MinYに関連してスケーリングする場合:
         // x' = minX + (x - minX) * scale.
-        // This works for Cartesian too.
+        // これはデカルト座標でも機能します。
 
         bulkUpdate(s => {
             let ns = { ...s };
@@ -183,8 +183,8 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                 ns.h = Math.round(newRy * 2);
 
             } else {
-                // Rect / Image / Text etc
-                // position
+                // 矩形 / 画像 / テキストなど
+                // 位置
                 const x = s.x || 0;
                 const y = s.y || 0;
                 const newX = groupMinX + (x - groupMinX) * scale;
@@ -209,7 +209,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
         // デフォルト形状フラグを維持
         if (asset.isDefaultShape) newA.isDefaultShape = true;
 
-        // Normalize
+        // 正規化
         if (!newA.entities && newA.shapes) {
             newA.entities = newA.shapes;
             delete newA.shapes;
@@ -226,10 +226,10 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
         const entities = asset.entities || [];
         if (entities.length === 0) return;
 
-        // Use the accurate bounds calculation logic
-        // This ensures rotated shapes are also handled correctly, aligning their visual bottom-left to 0,0.
-        // Wait, "Move to 0,0" usually implies Cartesian Origin.
-        // If we want visual bottom-left to be at 0,0:
+        // 正確な境界計算ロジックを使用
+        // これにより、回転した形状も正しく処理され、見た目の左下が0,0に配置されます。
+        // 待って、"Move to 0,0" は通常、デカルト座標の原点を意味します。
+        // 見た目の左下を0,0にしたい場合:
         // dx = -minX, dy = -minY.
 
         const bounds = calculateAssetBounds({ entities });
@@ -240,7 +240,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
 
         const newEntities = entities.map(s => {
             let ns = { ...s };
-            // Apply offset to all coordinate properties
+            // すべての座標プロパティにオフセットを適用
             if (ns.points) {
                 ns.points = ns.points.map(p => ({ ...p, x: p.x - minX, y: p.y - minY }));
             }
@@ -249,7 +249,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
             if (ns.cx !== undefined) ns.cx -= minX;
             if (ns.cy !== undefined) ns.cy -= minY;
 
-            // Handles for points?
+            // ポイントのハンドル
             if (ns.points) {
                 ns.points = ns.points.map(p => {
                     if (p.handles) {
