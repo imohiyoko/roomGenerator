@@ -15,26 +15,55 @@ export const Ruler = ({ viewState }) => {
     const offsetY = viewState.y;
     const scale = viewState.scale * BASE_SCALE;
 
-    // Visible range in logical coordinates
-    // We add a buffer to ensure ticks are drawn just outside the visible area for smooth panning
+    // Buffer for off-screen rendering
     const buffer = step;
+
+    // X-Axis (Standard: Right is +)
+    // ScreenX = OffsetX + LogicalX * Scale
+    // LogicalX = (ScreenX - OffsetX) / Scale
     const startX = Math.floor((-offsetX - buffer) / scale / step) * step;
     const endX = Math.ceil((size.w - offsetX + buffer) / scale / step) * step;
-    const startY = Math.floor((-offsetY - buffer) / scale / step) * step;
-    const endY = Math.ceil((size.h - offsetY + buffer) / scale / step) * step;
 
     const xTicks = [];
     for (let i = startX; i <= endX; i += step) {
         const x = offsetX + i * scale;
-        // Avoid drawing over the top-left corner intersection (20x20)
-        if (x > 20) xTicks.push(<g key={`x${i}`}><line x1={x} y1={0} x2={x} y2={15} stroke="#888" strokeWidth="1" /><text x={x + 2} y={12} fontSize="10" fill="#555">{i}</text></g>);
+        if (x > 20) xTicks.push(
+            <g key={`x${i}`}>
+                <line x1={x} y1={0} x2={x} y2={15} stroke="#888" strokeWidth="1" />
+                <text x={x + 2} y={12} fontSize="10" fill="#555">{i}</text>
+            </g>
+        );
     }
 
+    // Y-Axis (Cartesian: Up is +)
+    // ScreenY (SVG) increases Down.
+    // Origin is at OffsetY.
+    // ScreenY = OffsetY - CartesianY * Scale
+    // CartesianY = (OffsetY - ScreenY) / Scale
+
+    // We iterate over ScreenY space to generate ticks that align with the grid?
+    // Or we iterate over logical values and project them to screen.
+    // Let's iterate logical Cartesian values.
+
+    // Range of ScreenY: -Buffer to Size.H + Buffer.
+    // MinScreenY -> MaxCartesianY
+    // MaxScreenY -> MinCartesianY
+
+    const minScreenY = -buffer;
+    const maxScreenY = size.h + buffer;
+
+    const maxCartY = Math.ceil((offsetY - minScreenY) / scale / step) * step;
+    const minCartY = Math.floor((offsetY - maxScreenY) / scale / step) * step;
+
     const yTicks = [];
-    for (let i = startY; i <= endY; i += step) {
-        const y = offsetY + i * scale;
-        // Avoid drawing over the top-left corner intersection (20x20)
-        if (y > 20) yTicks.push(<g key={`y${i}`}><line x1={0} y1={y} x2={15} y2={y} stroke="#888" strokeWidth="1" /><text x={2} y={y + 10} fontSize="10" fill="#555">{i}</text></g>);
+    for (let i = minCartY; i <= maxCartY; i += step) {
+        const y = offsetY - i * scale; // Cartesian Y-up maps to Screen Y (Offset - Value*Scale)
+        if (y > 20) yTicks.push(
+            <g key={`y${i}`}>
+                <line x1={0} y1={y} x2={15} y2={y} stroke="#888" strokeWidth="1" />
+                <text x={2} y={y + 10} fontSize="10" fill="#555">{i}</text>
+            </g>
+        );
     }
 
     return (
