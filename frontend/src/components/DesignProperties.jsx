@@ -2,21 +2,11 @@ import React from 'react';
 import { Icon, Icons } from './Icon';
 import { ColorPicker } from './ColorPicker';
 import { NumberInput } from './NumberInput';
-import { fromMM, toMM, createRectPath, createTrianglePath, deepClone } from '../lib/utils';
+import { fromMM, toMM, createRectPath, createTrianglePath, deepClone, calculateAssetBounds } from '../lib/utils';
 import { useStore } from '../store';
 
-export const DesignProperties = () => {
-    // Select state from store
-    const localAssets = useStore(state => state.localAssets);
-    const globalAssets = useStore(state => state.globalAssets);
-    const designTargetId = useStore(state => state.designTargetId);
-    const setLocalAssets = useStore(state => state.setLocalAssets);
-    const setGlobalAssets = useStore(state => state.setGlobalAssets);
-    const setDesignTargetId = useStore(state => state.setDesignTargetId);
-    const palette = useStore(state => state.colorPalette);
-    const onAddToPalette = useStore(state => state.addToPalette);
-    const defaultColors = useStore(state => state.defaultColors);
-
+export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, setDesignTargetId, palette, onAddToPalette, defaultColors }) => {
+    // ストアから状態を選択
     const selectedShapeIndices = useStore(state => state.selectedShapeIndices);
     const setSelectedShapeIndices = useStore(state => state.setSelectedShapeIndices);
     const selectedPointIndex = useStore(state => state.selectedPointIndex);
@@ -38,7 +28,7 @@ export const DesignProperties = () => {
     const isMultiSelect = selectedShapeIndices.length > 1;
     const targetIndex = selectedShapeIndices.length === 1 ? selectedShapeIndices[0] : null;
 
-    // Normalize access to entities
+    // entities へのアクセスを正規化
     const entities = asset.entities || asset.shapes || [];
 
     const selectedEntity = (entities && targetIndex !== null) ? entities[targetIndex] : null;
@@ -148,11 +138,11 @@ export const DesignProperties = () => {
 
         if (groupMinX === Infinity || groupMinY === Infinity) return;
 
-        // 2. 左上基準でスケーリング (Cartesian: Bottom-Left is MinY)
-        // Wait, scaling logic: usually relative to center or min/min.
-        // If we scale relative to MinX, MinY:
+        // 2. 左上基準でスケーリング (Cartesian: 左下はMinY)
+        // 待って、スケーリングロジック：通常は中心または最小/最小に関連しています。
+        // MinX, MinYに関連してスケーリングする場合:
         // x' = minX + (x - minX) * scale.
-        // This works for Cartesian too.
+        // これはデカルト座標でも機能します。
 
         bulkUpdate(s => {
             let ns = { ...s };
@@ -194,8 +184,8 @@ export const DesignProperties = () => {
                 ns.h = Math.round(newRy * 2);
 
             } else {
-                // Rect / Image / Text etc
-                // position
+                // 矩形 / 画像 / テキストなど
+                // 位置
                 const x = s.x || 0;
                 const y = s.y || 0;
                 const newX = groupMinX + (x - groupMinX) * scale;
@@ -220,7 +210,7 @@ export const DesignProperties = () => {
         // デフォルト形状フラグを維持
         if (asset.isDefaultShape) newA.isDefaultShape = true;
 
-        // Normalize
+        // 正規化
         if (!newA.entities && newA.shapes) {
             newA.entities = newA.shapes;
             delete newA.shapes;
@@ -236,36 +226,42 @@ export const DesignProperties = () => {
         if (asset.source === 'global') return;
         const entities = asset.entities || [];
         if (entities.length === 0) return;
-        let minX = Infinity, minY = Infinity;
-        entities.forEach(s => {
-            if (s.points) {
-                s.points.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); });
-            } else if (s.type === 'ellipse' || s.type === 'circle') {
-                const cx = s.cx !== undefined ? s.cx : (s.x + s.w/2);
-                const cy = s.cy !== undefined ? s.cy : (s.y + s.h/2);
-                const rx = s.rx !== undefined ? s.rx : (s.w/2);
-                const ry = s.ry !== undefined ? s.ry : (s.h/2);
-                minX = Math.min(minX, cx - rx);
-                minY = Math.min(minY, cy - ry);
-            } else {
-                minX = Math.min(minX, s.x || 0); minY = Math.min(minY, s.y || 0);
-            }
-        });
-        if (minX === Infinity || (minX === 0 && minY === 0)) return;
+
+        // 正確な境界計算ロジックを使用
+        // これにより、回転した形状も正しく処理され、見た目の左下が0,0に配置されます。
+        // 待って、"Move to 0,0" は通常、デカルト座標の原点を意味します。
+        // 見た目の左下を0,0にしたい場合:
+        // dx = -minX, dy = -minY.
+
+        const bounds = calculateAssetBounds({ entities });
+        const minX = bounds.boundX;
+        const minY = bounds.boundY;
+
+        if (minX === 0 && minY === 0) return;
+
         const newEntities = entities.map(s => {
-            if (s.points) return { ...s, points: s.points.map(p => ({ ...p, x: p.x - minX, y: p.y - minY })) };
-            // For Rect/Ellipse
             let ns = { ...s };
+            // すべての座標プロパティにオフセットを適用
+            if (ns.points) {
+                ns.points = ns.points.map(p => ({ ...p, x: p.x - minX, y: p.y - minY }));
+            }
             if (ns.x !== undefined) ns.x -= minX;
             if (ns.y !== undefined) ns.y -= minY;
             if (ns.cx !== undefined) ns.cx -= minX;
             if (ns.cy !== undefined) ns.cy -= minY;
+
+            // ポイントのハンドル
+            if (ns.points) {
+                ns.points = ns.points.map(p => {
+                    if (p.handles) {
+                        return { ...p, handles: p.handles.map(h => ({ x: h.x - minX, y: h.y - minY })) };
+                    }
+                    return p;
+                });
+            }
             return ns;
         });
-        // Recalc bounds
-        let maxX = 0, maxY = 0;
-        // Actually DesignCanvas recalculates bounds on Drag End. Here we should update bounds roughly or let DesignCanvas handle it on next interaction?
-        // Let's approximate.
+
         setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
     };
 
