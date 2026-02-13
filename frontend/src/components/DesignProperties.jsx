@@ -2,15 +2,25 @@ import React from 'react';
 import { Icon, Icons } from './Icon';
 import { ColorPicker } from './ColorPicker';
 import { NumberInput } from './NumberInput';
-import { fromMM, toMM, createRectPath, createTrianglePath, deepClone, calculateAssetBounds } from '../lib/utils';
+import { fromMM, toMM, createRectPath, createTrianglePath, deepClone } from '../lib/utils';
 import { useStore } from '../store';
 
-export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, setDesignTargetId, palette, onAddToPalette, defaultColors }) => {
+export const DesignProperties = () => {
     // ストアから状態を選択
     const selectedShapeIndices = useStore(state => state.selectedShapeIndices);
     const setSelectedShapeIndices = useStore(state => state.setSelectedShapeIndices);
     const selectedPointIndex = useStore(state => state.selectedPointIndex);
     const setSelectedPointIndex = useStore(state => state.setSelectedPointIndex);
+
+    const localAssets = useStore(state => state.localAssets);
+    const globalAssets = useStore(state => state.globalAssets);
+    const setLocalAssets = useStore(state => state.setLocalAssets);
+    const setGlobalAssets = useStore(state => state.setGlobalAssets);
+    const designTargetId = useStore(state => state.designTargetId);
+    const setDesignTargetId = useStore(state => state.setDesignTargetId);
+    const palette = useStore(state => state.colorPalette);
+    const onAddToPalette = useStore(state => state.addToPalette);
+    const defaultColors = useStore(state => state.defaultColors);
 
     const allAssets = [...localAssets, ...globalAssets];
     const asset = allAssets.find(a => a.id === designTargetId);
@@ -227,17 +237,32 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
         const entities = asset.entities || [];
         if (entities.length === 0) return;
 
-        // 正確な境界計算ロジックを使用
-        // これにより、回転した形状も正しく処理され、見た目の左下が0,0に配置されます。
-        // 待って、"Move to 0,0" は通常、デカルト座標の原点を意味します。
-        // 見た目の左下を0,0にしたい場合:
-        // dx = -minX, dy = -minY.
+        // RAW座標の最小値を計算（回転は考慮せず、元の座標空間での原点寄せ）
+        let minX = Infinity;
+        let minY = Infinity;
 
-        const bounds = calculateAssetBounds({ entities });
-        const minX = bounds.boundX;
-        const minY = bounds.boundY;
+        entities.forEach(s => {
+            if (s.points) {
+                s.points.forEach(p => {
+                    if (p.x < minX) minX = p.x;
+                    if (p.y < minY) minY = p.y;
+                });
+            } else if (s.type === 'ellipse' || s.type === 'circle' || s.type === 'arc') {
+                const cx = s.cx !== undefined ? s.cx : (s.x + s.w / 2);
+                const cy = s.cy !== undefined ? s.cy : (s.y + s.h / 2);
+                const rx = s.rx !== undefined ? s.rx : (s.w / 2);
+                const ry = s.ry !== undefined ? s.ry : (s.h / 2);
+                if (cx - rx < minX) minX = cx - rx;
+                if (cy - ry < minY) minY = cy - ry;
+            } else {
+                const x = s.x || 0;
+                const y = s.y || 0;
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+            }
+        });
 
-        if (minX === 0 && minY === 0) return;
+        if (minX === Infinity || (minX === 0 && minY === 0)) return;
 
         const newEntities = entities.map(s => {
             let ns = { ...s };
