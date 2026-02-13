@@ -26,8 +26,12 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
 
     const isMultiSelect = selectedShapeIndices.length > 1;
     const targetIndex = selectedShapeIndices.length === 1 ? selectedShapeIndices[0] : null;
-    const selectedShape = (asset.shapes && targetIndex !== null) ? asset.shapes[targetIndex] : null;
-    const selectedPoint = (selectedShape && selectedShape.points && selectedPointIndex !== null) ? selectedShape.points[selectedPointIndex] : null;
+
+    // Normalize access to entities
+    const entities = asset.entities || asset.shapes || [];
+
+    const selectedEntity = (entities && targetIndex !== null) ? entities[targetIndex] : null;
+    const selectedPoint = (selectedEntity && selectedEntity.points && selectedPointIndex !== null) ? selectedEntity.points[selectedPointIndex] : null;
 
     const updateRoot = (k, v) => {
         if (asset.source === 'global') return;
@@ -39,7 +43,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
             if (k === 'type' && a.isDefaultShape && defaultColors && defaultColors[v]) {
                 const newColor = defaultColors[v];
                 updates.color = newColor;
-                updates.shapes = (a.shapes || []).map(s => ({ ...s, color: newColor }));
+                updates.entities = (a.entities || []).map(s => ({ ...s, color: newColor }));
             }
             // 色を手動変更したらデフォルト形状フラグを下ろす
             if (k === 'color') {
@@ -50,32 +54,33 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
     };
 
     // 単一選択用更新関数
-    const updateShape = (k, v) => {
+    const updateEntity = (k, v) => {
         if (asset.source === 'global' || targetIndex === null) return;
-        const currentShapes = asset.shapes || [];
-        const newShapes = currentShapes.map((s, i) => i === targetIndex ? { ...s, [k]: v } : s);
+        const currentEntities = asset.entities || [];
+        const newEntities = currentEntities.map((s, i) => i === targetIndex ? { ...s, [k]: v } : s);
         // 形状変更時はデフォルト形状フラグを下ろす
-        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
     };
+
     const updatePoint = (k, v) => {
         if (asset.source === 'global' || targetIndex === null || selectedPointIndex === null) return;
-        const newShapes = [...asset.shapes];
-        const newPts = [...newShapes[targetIndex].points];
+        const newEntities = [...(asset.entities || [])];
+        const newPts = [...newEntities[targetIndex].points];
         const newPt = { ...newPts[selectedPointIndex], [k]: v };
         newPts[selectedPointIndex] = newPt;
-        newShapes[targetIndex].points = newPts;
-        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+        newEntities[targetIndex].points = newPts;
+        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
     };
 
     // 一括操作用関数
     const bulkUpdate = (updater) => {
-        const newShapes = asset.shapes.map((s, i) => {
+        const newEntities = (asset.entities || []).map((s, i) => {
             if (selectedShapeIndices.includes(i)) {
                 return updater(s);
             }
             return s;
         });
-        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
     };
 
     const bulkMove = (dx, dy) => {
@@ -90,8 +95,8 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
 
     const bulkDelete = () => {
         if (!confirm(`${selectedShapeIndices.length}個のシェイプを削除しますか？`)) return;
-        const newShapes = asset.shapes.filter((_, i) => !selectedShapeIndices.includes(i));
-        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+        const newEntities = (asset.entities || []).filter((_, i) => !selectedShapeIndices.includes(i));
+        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
         setSelectedShapeIndices([]);
     };
 
@@ -108,7 +113,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
         let groupMinY = Infinity;
 
         selectedShapeIndices.forEach(index => {
-            const s = asset.shapes[index];
+            const s = (asset.entities || [])[index];
             if (!s) return;
             if (s.points) {
                 s.points.forEach(p => {
@@ -132,7 +137,12 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
 
         if (groupMinX === Infinity || groupMinY === Infinity) return;
 
-        // 2. 左上基準でスケーリング
+        // 2. 左上基準でスケーリング (Cartesian: Bottom-Left is MinY)
+        // Wait, scaling logic: usually relative to center or min/min.
+        // If we scale relative to MinX, MinY:
+        // x' = minX + (x - minX) * scale.
+        // This works for Cartesian too.
+
         bulkUpdate(s => {
             let ns = { ...s };
 
@@ -198,6 +208,13 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
         delete newA.source;
         // デフォルト形状フラグを維持
         if (asset.isDefaultShape) newA.isDefaultShape = true;
+
+        // Normalize
+        if (!newA.entities && newA.shapes) {
+            newA.entities = newA.shapes;
+            delete newA.shapes;
+        }
+
         setLocalAssets(prev => [...prev, newA]);
         if (setDesignTargetId) setDesignTargetId(newId);
     };
@@ -206,27 +223,39 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
     // 全体を(0,0)に寄せる
     const normalizePosition = () => {
         if (asset.source === 'global') return;
-        const shapes = asset.shapes || [];
-        if (shapes.length === 0) return;
+        const entities = asset.entities || [];
+        if (entities.length === 0) return;
         let minX = Infinity, minY = Infinity;
-        shapes.forEach(s => {
+        entities.forEach(s => {
             if (s.points) {
                 s.points.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); });
+            } else if (s.type === 'ellipse' || s.type === 'circle') {
+                const cx = s.cx !== undefined ? s.cx : (s.x + s.w/2);
+                const cy = s.cy !== undefined ? s.cy : (s.y + s.h/2);
+                const rx = s.rx !== undefined ? s.rx : (s.w/2);
+                const ry = s.ry !== undefined ? s.ry : (s.h/2);
+                minX = Math.min(minX, cx - rx);
+                minY = Math.min(minY, cy - ry);
             } else {
                 minX = Math.min(minX, s.x || 0); minY = Math.min(minY, s.y || 0);
             }
         });
         if (minX === Infinity || (minX === 0 && minY === 0)) return;
-        const newShapes = shapes.map(s => {
+        const newEntities = entities.map(s => {
             if (s.points) return { ...s, points: s.points.map(p => ({ ...p, x: p.x - minX, y: p.y - minY })) };
-            return { ...s, x: (s.x || 0) - minX, y: (s.y || 0) - minY };
+            // For Rect/Ellipse
+            let ns = { ...s };
+            if (ns.x !== undefined) ns.x -= minX;
+            if (ns.y !== undefined) ns.y -= minY;
+            if (ns.cx !== undefined) ns.cx -= minX;
+            if (ns.cy !== undefined) ns.cy -= minY;
+            return ns;
         });
+        // Recalc bounds
         let maxX = 0, maxY = 0;
-        newShapes.forEach(s => {
-            if (s.points) s.points.forEach(p => { maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); });
-            else { maxX = Math.max(maxX, (s.x || 0) + s.w); maxY = Math.max(maxY, (s.y || 0) + s.h); }
-        });
-        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, w: maxX, h: maxY, isDefaultShape: false } : a));
+        // Actually DesignCanvas recalculates bounds on Drag End. Here we should update bounds roughly or let DesignCanvas handle it on next interaction?
+        // Let's approximate.
+        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
     };
 
     if (asset.source === 'global') return (
@@ -279,8 +308,8 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                             <label className="prop-label">移動 (mm)</label>
                             <div className="flex gap-1">
                                 <button onClick={() => bulkMove(-100, 0)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">←</button>
-                                <button onClick={() => bulkMove(0, -100)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">↑</button>
-                                <button onClick={() => bulkMove(0, 100)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">↓</button>
+                                <button onClick={() => bulkMove(0, 100)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">↑</button> {/* Up = +Y */}
+                                <button onClick={() => bulkMove(0, -100)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">↓</button> {/* Down = -Y */}
                                 <button onClick={() => bulkMove(100, 0)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">→</button>
                             </div>
                         </div>
@@ -324,129 +353,129 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                         </div>
                         <div className="mt-2 pt-2 border-t">
                             <button onClick={() => {
-                                if (selectedShape.points.length <= 3) { alert('最低3点必要です'); return; }
-                                const newPts = selectedShape.points.filter((_, i) => i !== selectedPointIndex);
-                                const newShapes = [...asset.shapes];
-                                newShapes[targetIndex].points = newPts;
-                                setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+                                if (selectedEntity.points.length <= 3) { alert('最低3点必要です'); return; }
+                                const newPts = selectedEntity.points.filter((_, i) => i !== selectedPointIndex);
+                                const newEntities = [...(asset.entities || [])];
+                                newEntities[targetIndex].points = newPts;
+                                setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
                                 setSelectedPointIndex(null);
                             }} className="w-full py-1.5 text-xs bg-red-50 border border-red-200 text-red-600 rounded hover:bg-red-100 font-bold">この頂点を削除</button>
                         </div>
                     </div>
-                ) : selectedShape ? (
+                ) : selectedEntity ? (
                     <div className="bg-white p-2 rounded border-2 border-blue-300">
                         <div className="text-xs font-bold text-blue-600 mb-2">選択パーツ (mm)</div>
-                        {selectedShape.type !== 'polygon' && selectedShape.type !== 'ellipse' && (
+                        {selectedEntity.type !== 'polygon' && selectedEntity.type !== 'ellipse' && (
                             <>
-                                <div className="prop-row"><label className="prop-label">幅</label><NumberInput value={toMM(selectedShape.w)} onChange={e => updateShape('w', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">奥</label><NumberInput value={toMM(selectedShape.h)} onChange={e => updateShape('h', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">X</label><NumberInput value={toMM(selectedShape.x || 0)} onChange={e => updateShape('x', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">Y</label><NumberInput value={toMM(selectedShape.y || 0)} onChange={e => updateShape('y', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">幅</label><NumberInput value={toMM(selectedEntity.w)} onChange={e => updateEntity('w', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">奥</label><NumberInput value={toMM(selectedEntity.h)} onChange={e => updateEntity('h', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">X</label><NumberInput value={toMM(selectedEntity.x || 0)} onChange={e => updateEntity('x', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">Y</label><NumberInput value={toMM(selectedEntity.y || 0)} onChange={e => updateEntity('y', fromMM(Number(e.target.value)))} className="prop-input" /></div>
                             </>
                         )}
                         <div className="pt-2">
                             <label className="prop-label block mb-1">色</label>
-                            <ColorPicker value={selectedShape.color || asset.color} onChange={c => updateShape('color', c)} palette={palette} onAddToPalette={onAddToPalette} />
+                            <ColorPicker value={selectedEntity.color || asset.color} onChange={c => updateEntity('color', c)} palette={palette} onAddToPalette={onAddToPalette} />
                         </div>
 
                         {/* 楕円プロパティ */}
-                        {selectedShape.type === 'ellipse' && (
+                        {selectedEntity.type === 'ellipse' && (
                             <div className="mt-3 border-t pt-2">
                                 <div className="text-[10px] font-bold text-green-600 mb-2">楕円プロパティ</div>
-                                <div className="prop-row"><label className="prop-label">中心X</label><NumberInput value={toMM(selectedShape.cx || 0)} onChange={e => updateShape('cx', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">中心Y</label><NumberInput value={toMM(selectedShape.cy || 0)} onChange={e => updateShape('cy', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">横半径</label><NumberInput value={toMM(selectedShape.rx || 50)} onChange={e => updateShape('rx', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">縦半径</label><NumberInput value={toMM(selectedShape.ry || 50)} onChange={e => updateShape('ry', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">回転°</label><NumberInput value={selectedShape.rotation || 0} onChange={e => updateShape('rotation', Number(e.target.value))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">開始角°</label><NumberInput value={selectedShape.startAngle || 0} onChange={e => updateShape('startAngle', Number(e.target.value))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">終了角°</label><NumberInput value={selectedShape.endAngle || 360} onChange={e => updateShape('endAngle', Number(e.target.value))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">中心X</label><NumberInput value={toMM(selectedEntity.cx || 0)} onChange={e => updateEntity('cx', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">中心Y</label><NumberInput value={toMM(selectedEntity.cy || 0)} onChange={e => updateEntity('cy', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">横半径</label><NumberInput value={toMM(selectedEntity.rx || 50)} onChange={e => updateEntity('rx', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">縦半径</label><NumberInput value={toMM(selectedEntity.ry || 50)} onChange={e => updateEntity('ry', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">回転°</label><NumberInput value={selectedEntity.rotation || 0} onChange={e => updateEntity('rotation', Number(e.target.value))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">開始角°</label><NumberInput value={selectedEntity.startAngle || 0} onChange={e => updateEntity('startAngle', Number(e.target.value))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">終了角°</label><NumberInput value={selectedEntity.endAngle || 360} onChange={e => updateEntity('endAngle', Number(e.target.value))} className="prop-input" /></div>
                                 <div className="prop-row items-center">
                                     <label className="prop-label">形状</label>
-                                    <select value={selectedShape.arcMode || 'sector'} onChange={e => updateShape('arcMode', e.target.value)} className="prop-input text-xs">
+                                    <select value={selectedEntity.arcMode || 'sector'} onChange={e => updateEntity('arcMode', e.target.value)} className="prop-input text-xs">
                                         <option value="sector">扇形</option>
                                         <option value="chord">弓形</option>
                                     </select>
                                 </div>
                             </div>
                         )}
-                        {selectedShape.type === 'polygon' && selectedShape.points && (
+                        {selectedEntity.type === 'polygon' && selectedEntity.points && (
                             <div className="mt-3 border-t pt-2">
                                 <div className="flex justify-between items-center mb-2">
-                                    <span className="text-[10px] font-bold text-purple-600">頂点編集 ({selectedShape.points.length}点)</span>
+                                    <span className="text-[10px] font-bold text-purple-600">頂点編集 ({selectedEntity.points.length}点)</span>
                                 </div>
                                 <div className="space-y-0 max-h-48 overflow-y-auto scrollbar-thin">
-                                    {selectedShape.points.map((pt, idx) => (
+                                    {selectedEntity.points.map((pt, idx) => (
                                         <React.Fragment key={idx}>
                                             {/* 頂点行 */}
                                             <div className={`border rounded p-1.5 ${selectedPointIndex === idx ? 'bg-purple-50 border-purple-300' : 'hover:bg-gray-50'}`}>
                                                 <div className="flex items-center gap-1">
                                                     <span onClick={() => setSelectedPointIndex(idx)} className="w-5 h-5 flex items-center justify-center font-bold text-purple-400 bg-purple-100 rounded cursor-pointer text-[10px]">{idx}</span>
                                                     <NumberInput value={toMM(pt.x)} onChange={e => {
-                                                        const newPts = [...selectedShape.points];
+                                                        const newPts = [...selectedEntity.points];
                                                         newPts[idx] = { ...newPts[idx], x: fromMM(Number(e.target.value)) };
-                                                        const newShapes = [...asset.shapes];
-                                                        newShapes[targetIndex].points = newPts;
-                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+                                                        const newEntities = [...(asset.entities || [])];
+                                                        newEntities[targetIndex].points = newPts;
+                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
                                                     }} className="flex-1 text-[10px] p-0.5 border rounded w-12 text-center" placeholder="X" />
                                                     <NumberInput value={toMM(pt.y)} onChange={e => {
-                                                        const newPts = [...selectedShape.points];
+                                                        const newPts = [...selectedEntity.points];
                                                         newPts[idx] = { ...newPts[idx], y: fromMM(Number(e.target.value)) };
-                                                        const newShapes = [...asset.shapes];
-                                                        newShapes[targetIndex].points = newPts;
-                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+                                                        const newEntities = [...(asset.entities || [])];
+                                                        newEntities[targetIndex].points = newPts;
+                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
                                                     }} className="flex-1 text-[10px] p-0.5 border rounded w-12 text-center" placeholder="Y" />
                                                     <button onClick={() => {
-                                                        if (selectedShape.points.length <= 3) { alert('最低3点必要です'); return; }
-                                                        const newPts = selectedShape.points.filter((_, i) => i !== idx);
-                                                        const newShapes = [...asset.shapes];
-                                                        newShapes[targetIndex].points = newPts;
-                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+                                                        if (selectedEntity.points.length <= 3) { alert('最低3点必要です'); return; }
+                                                        const newPts = selectedEntity.points.filter((_, i) => i !== idx);
+                                                        const newEntities = [...(asset.entities || [])];
+                                                        newEntities[targetIndex].points = newPts;
+                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
                                                         if (selectedPointIndex === idx) setSelectedPointIndex(null);
                                                     }} className="text-[10px] text-red-400 hover:text-red-600 p-0.5" title="削除">×</button>
                                                 </div>
                                             </div>
                                             {/* 頂点間の操作ボタン */}
                                             <div className="flex flex-col items-center py-1 gap-0.5 bg-gray-50 rounded my-0.5">
-                                                <div className="text-[8px] text-gray-400">辺 {idx}→{(idx + 1) % selectedShape.points.length}</div>
+                                                <div className="text-[8px] text-gray-400">辺 {idx}→{(idx + 1) % selectedEntity.points.length}</div>
                                                 <div className="flex gap-1">
                                                     <button onClick={() => {
-                                                        const nextIdx = (idx + 1) % selectedShape.points.length;
-                                                        const nextPt = selectedShape.points[nextIdx];
+                                                        const nextIdx = (idx + 1) % selectedEntity.points.length;
+                                                        const nextPt = selectedEntity.points[nextIdx];
                                                         const newPt = { x: (pt.x + nextPt.x) / 2, y: (pt.y + nextPt.y) / 2, handles: [] };
-                                                        const newPts = [...selectedShape.points.slice(0, idx + 1), newPt, ...selectedShape.points.slice(idx + 1)];
-                                                        const newShapes = [...asset.shapes];
-                                                        newShapes[targetIndex].points = newPts;
-                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+                                                        const newPts = [...selectedEntity.points.slice(0, idx + 1), newPt, ...selectedEntity.points.slice(idx + 1)];
+                                                        const newEntities = [...(asset.entities || [])];
+                                                        newEntities[targetIndex].points = newPts;
+                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
                                                     }} className="text-[9px] text-green-600 hover:bg-green-100 px-1.5 py-0.5 rounded border border-green-300" title="頂点を追加">
                                                         +頂点
                                                     </button>
                                                     {(!pt.handles || pt.handles.length < 2) && (
                                                         <button onClick={() => {
-                                                            const newPts = [...selectedShape.points];
+                                                            const newPts = [...selectedEntity.points];
                                                             const handles = newPts[idx].handles || [];
-                                                            const nextIdx = (idx + 1) % selectedShape.points.length;
-                                                            const nextPt = selectedShape.points[nextIdx];
+                                                            const nextIdx = (idx + 1) % selectedEntity.points.length;
+                                                            const nextPt = selectedEntity.points[nextIdx];
                                                             // 新しい制御点を辺の中間に追加
                                                             const t = (handles.length + 1) / 3; // 1つ目は1/3、2つ目は2/3の位置
                                                             const midX = pt.x + (nextPt.x - pt.x) * t;
                                                             const midY = pt.y + (nextPt.y - pt.y) * t - 15;
                                                             newPts[idx] = { ...newPts[idx], handles: [...handles, { x: midX, y: midY }] };
-                                                            const newShapes = [...asset.shapes];
-                                                            newShapes[targetIndex].points = newPts;
-                                                            setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+                                                            const newEntities = [...(asset.entities || [])];
+                                                            newEntities[targetIndex].points = newPts;
+                                                            setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
                                                         }} className="text-[9px] text-blue-600 hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-300" title="曲線制御点を追加">
                                                             +曲線{pt.handles?.length === 1 ? '2' : ''}
                                                         </button>
                                                     )}
                                                     {(pt.handles?.length > 0) && (
                                                         <button onClick={() => {
-                                                            const newPts = [...selectedShape.points];
+                                                            const newPts = [...selectedEntity.points];
                                                             const handles = [...(newPts[idx].handles || [])];
                                                             handles.pop(); // 最後の制御点を削除
                                                             newPts[idx] = { ...newPts[idx], handles };
-                                                            const newShapes = [...asset.shapes];
-                                                            newShapes[targetIndex].points = newPts;
-                                                            setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+                                                            const newEntities = [...(asset.entities || [])];
+                                                            newEntities[targetIndex].points = newPts;
+                                                            setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
                                                         }} className="text-[9px] text-red-500 hover:bg-red-100 px-1 py-0.5 rounded border border-red-300" title="制御点を削除">
                                                             -{pt.handles.length}曲
                                                         </button>
@@ -459,22 +488,22 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                                             <div key={hid} className="flex items-center gap-1 bg-orange-50 rounded px-1 py-0.5">
                                                                 <span className="text-[8px] text-orange-500 font-bold w-4">C{hid + 1}</span>
                                                                 <NumberInput value={toMM(h.x)} onChange={e => {
-                                                                    const newPts = [...selectedShape.points];
+                                                                    const newPts = [...selectedEntity.points];
                                                                     const handles = [...newPts[idx].handles];
                                                                     handles[hid] = { ...handles[hid], x: fromMM(Number(e.target.value)) };
                                                                     newPts[idx] = { ...newPts[idx], handles };
-                                                                    const newShapes = [...asset.shapes];
-                                                                    newShapes[targetIndex].points = newPts;
-                                                                    setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+                                                                    const newEntities = [...(asset.entities || [])];
+                                                                    newEntities[targetIndex].points = newPts;
+                                                                    setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
                                                                 }} className="flex-1 text-[9px] p-0.5 border rounded w-10 text-center" placeholder="X" />
                                                                 <NumberInput value={toMM(h.y)} onChange={e => {
-                                                                    const newPts = [...selectedShape.points];
+                                                                    const newPts = [...selectedEntity.points];
                                                                     const handles = [...newPts[idx].handles];
                                                                     handles[hid] = { ...handles[hid], y: fromMM(Number(e.target.value)) };
                                                                     newPts[idx] = { ...newPts[idx], handles };
-                                                                    const newShapes = [...asset.shapes];
-                                                                    newShapes[targetIndex].points = newPts;
-                                                                    setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a));
+                                                                    const newEntities = [...(asset.entities || [])];
+                                                                    newEntities[targetIndex].points = newPts;
+                                                                    setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
                                                                 }} className="flex-1 text-[9px] p-0.5 border rounded w-10 text-center" placeholder="Y" />
                                                             </div>
                                                         ))}
@@ -496,13 +525,14 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                     <div className="flex justify-between items-center mb-2">
                         <label className="text-xs font-bold text-gray-500">構成要素</label>
                         <div className="flex gap-1">
-                            <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: [...(a.shapes || []), { type: 'polygon', points: createRectPath(40, 40, 0, 0), color: asset.color }], isDefaultShape: false } : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">□</button>
-                            <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: [...(a.shapes || []), { type: 'polygon', points: createTrianglePath(40, 40, 0, 0), color: asset.color }], isDefaultShape: false } : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">▽</button>
-                            <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: [...(a.shapes || []), { type: 'ellipse', cx: 30, cy: 30, rx: 30, ry: 30, startAngle: 0, endAngle: 360, arcMode: 'sector', color: asset.color }], isDefaultShape: false } : a))} className="px-1.5 py-0.5 bg-green-100 rounded hover:bg-green-200 text-[10px]" title="楕円/扇形">◔</button>
+                            {/* Create New Entities with Layer 'default' */}
+                            <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: [...(a.entities || []), { type: 'polygon', points: createRectPath(40, 40, 0, 0), color: asset.color, layer: 'default' }], isDefaultShape: false } : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">□</button>
+                            <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: [...(a.entities || []), { type: 'polygon', points: createTrianglePath(40, 40, 0, 0), color: asset.color, layer: 'default' }], isDefaultShape: false } : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">▽</button>
+                            <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: [...(a.entities || []), { type: 'ellipse', cx: 30, cy: 30, rx: 30, ry: 30, startAngle: 0, endAngle: 360, arcMode: 'sector', color: asset.color, layer: 'default' }], isDefaultShape: false } : a))} className="px-1.5 py-0.5 bg-green-100 rounded hover:bg-green-200 text-[10px]" title="楕円/扇形">◔</button>
                         </div>
                     </div>
                     <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-thin">
-                        {(asset.shapes || []).map((s, i) => (
+                        {(asset.entities || []).map((s, i) => (
                             <div key={i}
                                 onClick={(e) => {
                                     if (e.ctrlKey || e.metaKey) {
@@ -517,7 +547,7 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
                                 className={`flex justify-between items-center text-xs p-1 rounded border cursor-pointer ${selectedShapeIndices.includes(i) ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}
                             >
                                 <span className="font-bold text-gray-500">#{i + 1} {s.type}</span>
-                                <button onClick={(e) => { e.stopPropagation(); if (!confirm('削除？')) return; const newShapes = asset.shapes.filter((_, idx) => idx !== i); setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, shapes: newShapes, isDefaultShape: false } : a)); setSelectedShapeIndices(p => p.filter(idx => idx !== i)); }} className="text-red-400 hover:text-red-600 px-1">×</button>
+                                <button onClick={(e) => { e.stopPropagation(); if (!confirm('削除？')) return; const newEntities = (asset.entities || []).filter((_, idx) => idx !== i); setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a)); setSelectedShapeIndices(p => p.filter(idx => idx !== i)); }} className="text-red-400 hover:text-red-600 px-1">×</button>
                             </div>
                         ))}
                     </div>

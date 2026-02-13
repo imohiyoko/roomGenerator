@@ -372,11 +372,12 @@ func getDefaultGlobalAssets() []map[string]interface{} {
 		return map[string]interface{}{
 			"id": id, "name": name, "type": typ, "w": w, "h": h, "color": color, "snap": snap,
 			"isDefaultShape": true, // デフォルト形状としてマーク
-			"shapes": []interface{}{
+			"entities": []interface{}{
 				map[string]interface{}{
 					"type":   "polygon",
 					"points": createRect(w, h),
 					"color":  color,
+					"layer":  "default",
 				},
 			},
 		}
