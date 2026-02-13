@@ -57,7 +57,7 @@ export const createProjectSlice = (set, get) => ({
             designTargetId: null,
             selectedShapeIndices: [],
             selectedPointIndex: null,
-            viewState: { x: 50, y: 50, scale: 1 }
+            viewState: { x: 50, y: 600, scale: 1 }
         });
 
         get().temporal?.clear();
