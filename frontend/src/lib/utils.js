@@ -204,3 +204,86 @@ export const getClientPos = (e, viewState, svgRect) => {
     const y = toCartesianY(ySvg);
     return { x, y };
 };
+
+export const getRotatedAABB = (entity) => {
+    let vertices = [];
+    let cx = 0, cy = 0;
+
+    // 1. Determine Pivot (Center of Rotation)
+    if (entity.type === 'ellipse' || entity.type === 'circle' || entity.type === 'arc') {
+        cx = entity.cx !== undefined ? entity.cx : ((entity.x || 0) + (entity.w || 0) / 2);
+        cy = entity.cy !== undefined ? entity.cy : ((entity.y || 0) + (entity.h || 0) / 2);
+    } else {
+        cx = (entity.x || 0) + (entity.w || 0) / 2;
+        cy = (entity.y || 0) + (entity.h || 0) / 2;
+    }
+
+    // 2. Determine Unrotated Vertices
+    if (entity.type === 'polygon' && entity.points) {
+        vertices = entity.points.map(p => ({ x: p.x, y: p.y }));
+    } else if (entity.type === 'ellipse' || entity.type === 'circle' || entity.type === 'arc') {
+        // Option A: Bounding Box Approximation
+        const rx = entity.rx !== undefined ? entity.rx : (entity.w / 2);
+        const ry = entity.ry !== undefined ? entity.ry : (entity.h / 2);
+        // Box corners relative to center cx, cy
+        vertices = [
+            { x: cx - rx, y: cy - ry },
+            { x: cx + rx, y: cy - ry },
+            { x: cx + rx, y: cy + ry },
+            { x: cx - rx, y: cy + ry }
+        ];
+    } else {
+        // Rect / Image
+        const x = entity.x || 0;
+        const y = entity.y || 0;
+        const w = entity.w || 0;
+        const h = entity.h || 0;
+        vertices = [
+            { x: x, y: y },
+            { x: x + w, y: y },
+            { x: x + w, y: y + h },
+            { x: x, y: y + h }
+        ];
+    }
+
+    // 3. Rotate Vertices
+    const rotation = entity.rotation || 0;
+    if (rotation === 0) {
+        const xs = vertices.map(p => p.x);
+        const ys = vertices.map(p => p.y);
+        return {
+            minX: Math.min(...xs),
+            maxX: Math.max(...xs),
+            minY: Math.min(...ys),
+            maxY: Math.max(...ys),
+            width: Math.max(...xs) - Math.min(...xs),
+            height: Math.max(...ys) - Math.min(...ys)
+        };
+    }
+
+    const rad = (rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    const rotatedVertices = vertices.map(p => {
+        const dx = p.x - cx;
+        const dy = p.y - cy;
+        return {
+            x: dx * cos - dy * sin + cx,
+            y: dx * sin + dy * cos + cy
+        };
+    });
+
+    // 4. Find Bounds
+    const xs = rotatedVertices.map(p => p.x);
+    const ys = rotatedVertices.map(p => p.y);
+
+    return {
+        minX: Math.min(...xs),
+        maxX: Math.max(...xs),
+        minY: Math.min(...ys),
+        maxY: Math.max(...ys),
+        width: Math.max(...xs) - Math.min(...xs),
+        height: Math.max(...ys) - Math.min(...ys)
+    };
+};

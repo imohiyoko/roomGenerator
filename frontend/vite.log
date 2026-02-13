@@ -3,25 +3,7 @@
 > vite
 
 
-  VITE v3.2.11  ready in 529 ms
+  VITE v3.2.11  ready in 501 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
-9:56:09 AM [vite] hmr update /src/components/Ruler.jsx
-hmr update /src/style.css
-9:56:45 AM [vite] page reload dist/index.html
-10:40:13 AM [vite] hmr update /src/App.jsx
-hmr update /src/style.css
-hmr update /src/pages/Home.jsx
-hmr update /src/style.css
-hmr update /src/pages/Library.jsx
-hmr update /src/style.css
-hmr update /src/pages/Editor.jsx
-hmr update /src/style.css
-hmr update /src/components/DesignCanvas.jsx
-hmr update /src/style.css
-hmr update /src/components/DesignProperties.jsx
-hmr update /src/style.css
-hmr update /src/style.css
-hmr update /src/style.css
-10:40:49 AM [vite] page reload dist/index.html

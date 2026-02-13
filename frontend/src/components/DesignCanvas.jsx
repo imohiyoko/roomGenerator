@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
-import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone } from '../lib/utils';
+import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, getRotatedAABB } from '../lib/utils';
 import { useStore } from '../store';
 
 // Render Component
@@ -240,7 +240,27 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
     if (!localAsset) return null;
 
     const updateLocalEntities = (newEntities) => {
+        // Calculate bounds with rotation
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let hasEntities = newEntities.length > 0;
+
+        if (hasEntities) {
+            newEntities.forEach(s => {
+                const bounds = getRotatedAABB(s);
+                if (bounds.minX < minX) minX = bounds.minX;
+                if (bounds.maxX > maxX) maxX = bounds.maxX;
+                if (bounds.minY < minY) minY = bounds.minY;
+                if (bounds.maxY > maxY) maxY = bounds.maxY;
+            });
+        }
+
         const updated = { ...localAsset, entities: newEntities, isDefaultShape: false };
+        if (hasEntities && minX !== Infinity) {
+            updated.boundX = Math.round(minX);
+            updated.boundY = Math.round(minY);
+            updated.w = Math.round(maxX - minX);
+            updated.h = Math.round(maxY - minY);
+        }
         setLocalAsset(updated);
     };
 
@@ -566,32 +586,19 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         if (dragRef.current.mode !== 'idle' && dragRef.current.mode !== 'marquee' && dragRef.current.mode !== 'panning') {
              const entities = finalAsset.entities || [];
              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-             let hasPoints = false;
+             let hasEntities = entities.length > 0;
 
-             entities.forEach(s => {
-                if (s.points) {
-                    hasPoints = true;
-                    s.points.forEach(p => {
-                        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-                        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
-                    });
-                } else if (s.type === 'ellipse' || s.type === 'arc' || s.type === 'circle') {
-                    hasPoints = true;
-                    const cx = s.cx !== undefined ? s.cx : (s.x + s.w / 2);
-                    const cy = s.cy !== undefined ? s.cy : (s.y + s.h / 2);
-                    const rx = s.rx !== undefined ? s.rx : (s.w / 2);
-                    const ry = s.ry !== undefined ? s.ry : (s.h / 2);
-                    if (cx - rx < minX) minX = cx - rx; if (cx + rx > maxX) maxX = cx + rx;
-                    if (cy - ry < minY) minY = cy - ry; if (cy + ry > maxY) maxY = cy + ry;
-                } else {
-                    hasPoints = true;
-                    const x = s.x || 0; const y = s.y || 0; const w = s.w || 0; const h = s.h || 0;
-                    if (x < minX) minX = x; if (x + w > maxX) maxX = x + w;
-                    if (y < minY) minY = y; if (y + h > maxY) maxY = y + h;
-                }
-            });
+             if (hasEntities) {
+                 entities.forEach(s => {
+                     const bounds = getRotatedAABB(s);
+                     if (bounds.minX < minX) minX = bounds.minX;
+                     if (bounds.maxX > maxX) maxX = bounds.maxX;
+                     if (bounds.minY < minY) minY = bounds.minY;
+                     if (bounds.maxY > maxY) maxY = bounds.maxY;
+                 });
+             }
 
-            if (hasPoints && minX !== Infinity) {
+            if (hasEntities && minX !== Infinity) {
                 const w = Math.round(maxX - minX); const h = Math.round(maxY - minY);
                 const bx = Math.round(minX); const by = Math.round(minY);
                 if (finalAsset.w !== w || finalAsset.h !== h || finalAsset.boundX !== bx || finalAsset.boundY !== by) {
