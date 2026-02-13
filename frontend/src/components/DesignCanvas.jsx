@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
 import { generateSvgPath, generateEllipsePath, createRectPath } from '../lib/utils';
-import { useStore } from '../lib/store';
+import { useStore } from '../store';
 
 // Render Component
 const DesignCanvasRender = ({ viewState, asset, shapes, selectedShapeIndices, selectedPointIndex, onDown, onMove, onUp, onDeleteShape, svgRef, marquee, cursorMode }) => {
