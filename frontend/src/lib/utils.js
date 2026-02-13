@@ -110,8 +110,8 @@ export const generateEllipsePath = (shape) => {
     // Convert to SVG coordinates
     const cxs = cx * BASE_SCALE;
     const cys = toSvgY(cy) * BASE_SCALE;
-    const rxs = rx * BASE_SCALE;
-    const rys = ry * BASE_SCALE;
+    const rxs = Math.abs(rx * BASE_SCALE); // Absolute radius to prevent SVG errors
+    const rys = Math.abs(ry * BASE_SCALE);
 
     // Angles: In Cartesian, angle increases CCW. In SVG (with Y-down), angle increases CW.
     // To match visual appearance: angle_svg = -angle_cartesian.
@@ -206,7 +206,31 @@ export const getClientPos = (e, viewState, svgRect) => {
 };
 
 
-// Calculate Axis-Aligned Bounding Box for a rotated entity (Y-Up system)
+
+export const calculateAssetBounds = (asset) => {
+    if (!asset || !asset.entities || asset.entities.length === 0) {
+        return { boundX: 0, boundY: 0, w: asset.w || 0, h: asset.h || 0 };
+    }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    asset.entities.forEach(entity => {
+        const bounds = getRotatedAABB(entity);
+        if (bounds.minX < minX) minX = bounds.minX;
+        if (bounds.maxX > maxX) maxX = bounds.maxX;
+        if (bounds.minY < minY) minY = bounds.minY;
+        if (bounds.maxY > maxY) maxY = bounds.maxY;
+    });
+
+    if (minX === Infinity) return { boundX: 0, boundY: 0, w: asset.w, h: asset.h };
+    return {
+        boundX: Math.round(minX),
+        boundY: Math.round(minY),
+        w: Math.round(maxX - minX),
+        h: Math.round(maxY - minY)
+    };
+};
+
+// Override getRotatedAABB with Arc/Sector support
 export const getRotatedAABB = (entity) => {
     const rotation = entity.rotation || 0;
     const rad = (rotation * Math.PI) / 180;
@@ -216,29 +240,109 @@ export const getRotatedAABB = (entity) => {
     // Determine Center (Pivot)
     let cx, cy;
     if (entity.type === 'ellipse' || entity.type === 'circle' || entity.type === 'arc') {
-        cx = entity.cx !== undefined ? entity.cx : (entity.x + entity.w / 2);
-        cy = entity.cy !== undefined ? entity.cy : (entity.y + entity.h / 2);
+        cx = entity.cx !== undefined ? entity.cx : ((entity.x || 0) + (entity.w || 0) / 2);
+        cy = entity.cy !== undefined ? entity.cy : ((entity.y || 0) + (entity.h || 0) / 2);
     } else {
         cx = (entity.x || 0) + (entity.w || 0) / 2;
         cy = (entity.y || 0) + (entity.h || 0) / 2;
     }
 
-    // Case 1: Ellipse / Circle (Exact Calculation for tighter bounds)
-    if (entity.type === 'ellipse' || entity.type === 'circle') {
-        const rx = entity.rx !== undefined ? entity.rx : entity.w / 2;
-        const ry = entity.ry !== undefined ? entity.ry : entity.h / 2;
+    // Case 1: Ellipse / Circle / Arc / Sector
+    if (entity.type === 'ellipse' || entity.type === 'circle' || entity.type === 'arc') {
+        const rx = Math.abs(entity.rx !== undefined ? entity.rx : (entity.w / 2));
+        const ry = Math.abs(entity.ry !== undefined ? entity.ry : (entity.h / 2));
 
-        // Formula for the extent of a rotated ellipse
-        const halfW = Math.sqrt(Math.pow(rx * cos, 2) + Math.pow(ry * sin, 2));
-        const halfH = Math.sqrt(Math.pow(rx * sin, 2) + Math.pow(ry * cos, 2));
+        // Full Ellipse logic if no start/end angle or full circle
+        const startAngle = entity.startAngle !== undefined ? entity.startAngle : 0;
+        const endAngle = entity.endAngle !== undefined ? entity.endAngle : 360;
+        const arcMode = entity.arcMode || 'sector';
+
+        // Normalize angles to [0, 360) for checking
+        let sDeg = startAngle % 360;
+        if (sDeg < 0) sDeg += 360;
+        let eDeg = endAngle % 360;
+        if (eDeg < 0) eDeg += 360;
+
+        if (Math.abs(endAngle - startAngle) >= 360) {
+            // Full Ellipse Formula
+            const halfW = Math.sqrt(Math.pow(rx * cos, 2) + Math.pow(ry * sin, 2));
+            const halfH = Math.sqrt(Math.pow(rx * sin, 2) + Math.pow(ry * cos, 2));
+            return {
+                minX: cx - halfW, maxX: cx + halfW,
+                minY: cy - halfH, maxY: cy + halfH,
+                width: halfW * 2, height: halfH * 2
+            };
+        }
+
+        // Partial Ellipse (Arc/Sector) Logic
+        // We need to find extrema of x(t) and y(t) within [startRad, endRad].
+        // x(t) = cx + rx cos(t) cos(rot) - ry sin(t) sin(rot)
+        // y(t) = cy + rx cos(t) sin(rot) + ry sin(t) cos(rot)
+
+        // Convert input angles to radians
+        const sRad = (startAngle * Math.PI) / 180;
+        const eRad = (endAngle * Math.PI) / 180;
+
+        // Points to check: Start, End, Center (if sector), and local extrema.
+        let points = [];
+
+        // Start & End points
+        const getPoint = (theta) => ({
+            x: cx + rx * Math.cos(theta) * cos - ry * Math.sin(theta) * sin,
+            y: cy + rx * Math.cos(theta) * sin + ry * Math.sin(theta) * cos
+        });
+
+        points.push(getPoint(sRad));
+        points.push(getPoint(eRad));
+
+        if (arcMode === 'sector') {
+            points.push({ x: cx, y: cy });
+        }
+
+        // Find extrema parameter 't' in [0, 2PI)
+        // Helper to check if angle 't' (radians) is effectively within [startAngle, endAngle] (degrees)
+        // We normalize 't' to degrees [0, 360) and check against sDeg, eDeg.
+        const inRange = (tRad) => {
+            let tDeg = (tRad * 180 / Math.PI) % 360;
+            if (tDeg < 0) tDeg += 360;
+
+            // Check direction: start -> end (CCW)
+            // If s < e: s <= t <= e
+            // If s > e: s <= t or t <= e (wrapping)
+            if (sDeg < eDeg) {
+                return tDeg >= sDeg && tDeg <= eDeg;
+            } else {
+                return tDeg >= sDeg || tDeg <= eDeg;
+            }
+        };
+
+        // Extrema for X
+        // tan(t) = - (ry sin(rot)) / (rx cos(rot))
+        const tanTx = - (ry * sin) / (rx * cos);
+        const tx1 = Math.atan(tanTx);
+        const tx2 = tx1 + Math.PI;
+
+        if (inRange(tx1)) points.push(getPoint(tx1));
+        if (inRange(tx2)) points.push(getPoint(tx2));
+
+        // Extrema for Y
+        // tan(t) = (ry cos(rot)) / (rx sin(rot))
+        const tanTy = (ry * cos) / (rx * sin);
+        const ty1 = Math.atan(tanTy);
+        const ty2 = ty1 + Math.PI;
+
+        if (inRange(ty1)) points.push(getPoint(ty1));
+        if (inRange(ty2)) points.push(getPoint(ty2));
+
+        const xs = points.map(p => p.x);
+        const ys = points.map(p => p.y);
+
+        const minX = Math.min(...xs); const maxX = Math.max(...xs);
+        const minY = Math.min(...ys); const maxY = Math.max(...ys);
 
         return {
-            minX: cx - halfW,
-            maxX: cx + halfW,
-            minY: cy - halfH,
-            maxY: cy + halfH,
-            width: halfW * 2,
-            height: halfH * 2
+            minX, maxX, minY, maxY,
+            width: maxX - minX, height: maxY - minY
         };
     }
 
@@ -271,28 +375,5 @@ export const getRotatedAABB = (entity) => {
         maxY,
         width: maxX - minX,
         height: maxY - minY
-    };
-};
-
-export const calculateAssetBounds = (asset) => {
-    if (!asset || !asset.entities || asset.entities.length === 0) {
-        return { boundX: 0, boundY: 0, w: asset.w || 0, h: asset.h || 0 };
-    }
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-    asset.entities.forEach(entity => {
-        const bounds = getRotatedAABB(entity);
-        if (bounds.minX < minX) minX = bounds.minX;
-        if (bounds.maxX > maxX) maxX = bounds.maxX;
-        if (bounds.minY < minY) minY = bounds.minY;
-        if (bounds.maxY > maxY) maxY = bounds.maxY;
-    });
-
-    if (minX === Infinity) return { boundX: 0, boundY: 0, w: asset.w, h: asset.h };
-    return {
-        boundX: Math.round(minX),
-        boundY: Math.round(minY),
-        w: Math.round(maxX - minX),
-        h: Math.round(maxY - minY)
     };
 };

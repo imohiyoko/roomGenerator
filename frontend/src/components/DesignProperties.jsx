@@ -2,7 +2,7 @@ import React from 'react';
 import { Icon, Icons } from './Icon';
 import { ColorPicker } from './ColorPicker';
 import { NumberInput } from './NumberInput';
-import { fromMM, toMM, createRectPath, createTrianglePath, deepClone } from '../lib/utils';
+import { fromMM, toMM, createRectPath, createTrianglePath, deepClone, calculateAssetBounds } from '../lib/utils';
 import { useStore } from '../store';
 
 export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, setDesignTargetId, palette, onAddToPalette, defaultColors }) => {
@@ -225,36 +225,42 @@ export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGl
         if (asset.source === 'global') return;
         const entities = asset.entities || [];
         if (entities.length === 0) return;
-        let minX = Infinity, minY = Infinity;
-        entities.forEach(s => {
-            if (s.points) {
-                s.points.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); });
-            } else if (s.type === 'ellipse' || s.type === 'circle') {
-                const cx = s.cx !== undefined ? s.cx : (s.x + s.w/2);
-                const cy = s.cy !== undefined ? s.cy : (s.y + s.h/2);
-                const rx = s.rx !== undefined ? s.rx : (s.w/2);
-                const ry = s.ry !== undefined ? s.ry : (s.h/2);
-                minX = Math.min(minX, cx - rx);
-                minY = Math.min(minY, cy - ry);
-            } else {
-                minX = Math.min(minX, s.x || 0); minY = Math.min(minY, s.y || 0);
-            }
-        });
-        if (minX === Infinity || (minX === 0 && minY === 0)) return;
+
+        // Use the accurate bounds calculation logic
+        // This ensures rotated shapes are also handled correctly, aligning their visual bottom-left to 0,0.
+        // Wait, "Move to 0,0" usually implies Cartesian Origin.
+        // If we want visual bottom-left to be at 0,0:
+        // dx = -minX, dy = -minY.
+
+        const bounds = calculateAssetBounds({ entities });
+        const minX = bounds.boundX;
+        const minY = bounds.boundY;
+
+        if (minX === 0 && minY === 0) return;
+
         const newEntities = entities.map(s => {
-            if (s.points) return { ...s, points: s.points.map(p => ({ ...p, x: p.x - minX, y: p.y - minY })) };
-            // For Rect/Ellipse
             let ns = { ...s };
+            // Apply offset to all coordinate properties
+            if (ns.points) {
+                ns.points = ns.points.map(p => ({ ...p, x: p.x - minX, y: p.y - minY }));
+            }
             if (ns.x !== undefined) ns.x -= minX;
             if (ns.y !== undefined) ns.y -= minY;
             if (ns.cx !== undefined) ns.cx -= minX;
             if (ns.cy !== undefined) ns.cy -= minY;
+
+            // Handles for points?
+            if (ns.points) {
+                ns.points = ns.points.map(p => {
+                    if (p.handles) {
+                        return { ...p, handles: p.handles.map(h => ({ x: h.x - minX, y: h.y - minY })) };
+                    }
+                    return p;
+                });
+            }
             return ns;
         });
-        // Recalc bounds
-        let maxX = 0, maxY = 0;
-        // Actually DesignCanvas recalculates bounds on Drag End. Here we should update bounds roughly or let DesignCanvas handle it on next interaction?
-        // Let's approximate.
+
         setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
     };
 
