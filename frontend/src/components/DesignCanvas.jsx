@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
-import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, calculateAssetBounds } from '../lib/utils';
+import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone } from '../lib/utils';
 import { useStore } from '../store';
 
-// レンダリングコンポーネント
+// Render Component
 const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, selectedPointIndex, onDown, onMove, onUp, onDeleteShape, svgRef, marquee, cursorMode }) => {
-    // カーソルスタイルの適用
+    // Apply cursor style
     useEffect(() => {
         if (!svgRef.current) return;
         let cursorStyle = 'default';
@@ -38,8 +38,8 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
                     <line x1="0" y1="-5000" x2="0" y2="5000" stroke="#ccc" strokeWidth="2" />
                     <circle cx="0" cy="0" r="5" fill="red" opacity="0.5" />
                     {asset && (() => {
-                        // アセットバウンディングボックス (デカルト -> SVG)
-                        // デカルト: boundX, boundY (左下), w, h
+                        // Asset Bounding Box (Cartesian to SVG)
+                        // Cartesian: boundX, boundY (Bottom-Left), w, h.
                         // SVG Rect: x=boundX, y=-(boundY+h), w, h
                         const bx = (asset.boundX || 0) * BASE_SCALE;
                         const by = toSvgY((asset.boundY || 0) + asset.h) * BASE_SCALE;
@@ -51,13 +51,13 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
                                     const isSelected = selectedShapeIndices.includes(i);
                                     const style = { fill: s.color || asset.color, stroke: isSelected ? "#3b82f6" : "#999", strokeWidth: isSelected ? 2 : 1, cursor: 'move' };
 
-                                    // 回転ロジック (デカルトCCW -> SVG CW)
+                                    // Rotation logic (Cartesian CCW -> SVG CW)
                                     const rot = s.rotation ? toSvgRotation(s.rotation) : 0;
 
-                                    // 回転中心ロジック
-                                    // 楕円の場合: 中心は cx, cy
-                                    // 矩形/ポリゴンの場合: 通常はバウンディングボックスの中心だが、ロジックでは s.x/y または cx/cy を使用
-                                    // SVG座標での中心を取得するヘルパー
+                                    // Rotation Center logic
+                                    // For Ellipse: center is cx, cy.
+                                    // For Rect/Polygon: center is usually center of bounds, but logic uses s.x/y or cx/cy.
+                                    // Helper to get center in SVG coords
                                     let cx_svg = 0, cy_svg = 0;
                                     if (s.type === 'ellipse' || s.type === 'circle' || s.type === 'arc') {
                                         cx_svg = (s.cx !== undefined ? s.cx : (s.x + s.w/2)) * BASE_SCALE;
@@ -77,21 +77,21 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
                                                     ? <path d={generateEllipsePath(s)} transform={rotateTransform} {...style} />
                                                     : <path d={generateSvgPath(s.points)} {...style} />
                                             }
-                                            {/* 楕円ハンドル */}
+                                            {/* Ellipse Handles */}
                                             {isSelected && s.type === 'ellipse' && (() => {
                                                 const cx = (s.cx || 0) * BASE_SCALE;
                                                 const cy = toSvgY(s.cy || 0) * BASE_SCALE;
                                                 const rxs = (s.rx || 50) * BASE_SCALE;
                                                 const rys = (s.ry || 50) * BASE_SCALE;
 
-                                                // SVG空間でのハンドル位置（表示用）
-                                                // 回転はグループに適用されるため、中心に対するローカルの未回転SVG空間にハンドルを描画します
-                                                // generateEllipsePath はパスを生成し、rotateTransform は中心周りに回転させます
-                                                // したがって、<g transform={rotateTransform}> 内にハンドルを配置すれば一致するはずです
+                                                // Handle Positions in SVG Space (Visual)
+                                                // Rotation is applied to the GROUP, so we draw handles in LOCAL unrotated SVG space relative to center?
+                                                // generateEllipsePath generates path. rotateTransform rotates it around center.
+                                                // So if we put handles inside <g transform={rotateTransform}>, they should align.
 
-                                                // ハンドル配置のためのSVG角度:
-                                                // StartAngle (デカルト) -> -StartAngle (SVG)
-                                                // 0 は東
+                                                // SVG Angles for handle placement:
+                                                // StartAngle (Cartesian) -> -StartAngle (SVG).
+                                                // 0 is East.
 
                                                 const startRad = toSvgRotation(s.startAngle || 0) * Math.PI / 180;
                                                 const endRad = toSvgRotation(s.endAngle || 360) * Math.PI / 180;
@@ -101,24 +101,24 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
                                                 const ex = cx + rxs * Math.cos(endRad);
                                                 const ey = cy + rys * Math.sin(endRad);
 
-                                                const rotHandleY = cy - rys - 20; // 上部より上の視覚的ハンドル
+                                                const rotHandleY = cy - rys - 20; // Visual handle above top
 
                                                 return (
                                                     <g transform={rotateTransform}>
                                                         <circle cx={cx} cy={cy} r="6" fill="red" stroke="white" strokeWidth="2" className="cursor-move" />
-                                                        {/* 幅ハンドル（右） */}
+                                                        {/* Width Handle (Right) */}
                                                         <rect x={cx + rxs - 4} y={cy - 4} width="8" height="8" fill="orange" stroke="white" strokeWidth="1" className="cursor-ew-resize" onPointerDown={(e) => onDown(e, i, 'rx')} />
-                                                        {/* 高さハンドル（SVGでは下、デカルトでは上？ ryは半径なので方向は対称） */}
+                                                        {/* Height Handle (Bottom in SVG, Top in Cartesian? ry is radius so direction symmetric) */}
                                                         <rect x={cx - 4} y={cy + rys - 4} width="8" height="8" fill="orange" stroke="white" strokeWidth="1" className="cursor-ns-resize" onPointerDown={(e) => onDown(e, i, 'ry')} />
 
-                                                        {/* コーナーハンドル */}
+                                                        {/* Corner Handle */}
                                                         <rect x={cx + rxs - 4} y={cy + rys - 4} width="8" height="8" fill="yellow" stroke="orange" strokeWidth="1" className="cursor-nwse-resize" onPointerDown={(e) => onDown(e, i, 'rxy')} />
 
-                                                        {/* 回転ハンドル */}
+                                                        {/* Rotation Handle */}
                                                         <line x1={cx} y1={cy - rys} x2={cx} y2={rotHandleY} stroke="cyan" strokeWidth="1" strokeDasharray="3,2" />
                                                         <circle cx={cx} cy={rotHandleY} r="5" fill="cyan" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'rotation')} />
 
-                                                        {/* 角度ハンドル */}
+                                                        {/* Angle Handles */}
                                                         <line x1={cx} y1={cy} x2={sx * 0.6 + cx * 0.4} y2={sy * 0.6 + cy * 0.4} stroke="green" strokeWidth="1" strokeDasharray="3,2" />
                                                         <line x1={cx} y1={cy} x2={ex * 0.6 + cx * 0.4} y2={ey * 0.6 + cy * 0.4} stroke="purple" strokeWidth="1" strokeDasharray="3,2" />
                                                         <circle cx={sx * 0.6 + cx * 0.4} cy={sy * 0.6 + cy * 0.4} r="5" fill="green" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'startAngle')} />
@@ -126,7 +126,7 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
                                                     </g>
                                                 );
                                             })()}
-                                            {/* ポリゴン頂点 */}
+                                            {/* Polygon Points */}
                                             {isSelected && s.type === 'polygon' && s.points.map((p, pid) => (
                                                 <React.Fragment key={pid}>
                                                     <circle cx={p.x * BASE_SCALE} cy={toSvgY(p.y) * BASE_SCALE} r="5" fill={selectedPointIndex === pid ? "red" : "white"} stroke="blue" strokeWidth="2" className="cursor-crosshair" onPointerDown={(e) => onDown(e, i, pid)} />
@@ -138,15 +138,15 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
                                                     ))}
                                                 </React.Fragment>
                                             ))}
-                                            {/* 矩形/ポリゴンのバウンディングボックス削除ボタン */}
+                                            {/* Rect/Polygon Bounds Delete Button */}
                                             {isSelected && s.type === 'polygon' && (() => {
                                                 const maxX = Math.max(...s.points.map(p => p.x));
-                                                const minY = Math.min(...s.points.map(p => p.y)); // デカルト最小Y
-                                                // SVGの最大Yはデカルトの最小Y（下）に対応
-                                                // SVGの最小Yはデカルトの最大Y（上）に対応
-                                                // 削除ボタンはどこに置く？ 右上？
-                                                // デカルト右上: MaxX, MaxY
-                                                // SVG右上: MaxX, toSvgY(MaxY)
+                                                const minY = Math.min(...s.points.map(p => p.y)); // Cartesian Min Y
+                                                // SVG Max Y corresponds to Cartesian Min Y (Bottom)
+                                                // SVG Min Y corresponds to Cartesian Max Y (Top)
+                                                // Where to put the delete button? Top-Right?
+                                                // Top-Right Cartesian: MaxX, MaxY.
+                                                // Top-Right SVG: MaxX, toSvgY(MaxY).
                                                 const maxY = Math.max(...s.points.map(p => p.y));
 
                                                 return (
@@ -156,36 +156,36 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
                                                     </g>
                                                 );
                                             })()}
-                                            {/* 矩形リサイズハンドル */}
+                                            {/* Rect Resizers */}
                                             {isSelected && (s.type === 'circle' || s.type === 'rect') && (
                                                 <g>
-                                                    {/* SVG空間での矩形の角 */}
-                                                    {/* 右上: x+w, y+h (デカルト) -> x+w, -(y+h) (SVG) */}
-                                                    {/* 右下: x+w, y (デカルト) -> x+w, -y (SVG) */}
-                                                    {/* 下中央: x+w/2, y -> ... */}
+                                                    {/* Rect Corners in SVG Space */}
+                                                    {/* Top-Right: x+w, y+h (Cartesian) -> x+w, -(y+h) (SVG) */}
+                                                    {/* Bottom-Right: x+w, y (Cartesian) -> x+w, -y (SVG) */}
+                                                    {/* Bottom-Center: x+w/2, y -> ... */}
 
-                                                    {/* 注: s.y はデカルト座標の左下Y */}
+                                                    {/* Note: s.y is Bottom-Left Y in Cartesian */}
 
-                                                    {/* 両方リサイズ（見た目の右下？） */}
-                                                    {/* 通常リサイザーはSVGロジックで右下（最大X、最大Y）にあります */}
-                                                    {/* デカルトでは、右下は (x+w, y)。SVG: (x+w, -y) */}
+                                                    {/* Resize Both (Bottom-Right visual?) */}
+                                                    {/* Usually Resizer is at Bottom-Right in SVG logic (Max X, Max Y). */}
+                                                    {/* In Cartesian, Bottom-Right is (x+w, y). SVG: (x+w, -y). */}
 
-                                                    {/* 幅リサイズ（右中央） */}
+                                                    {/* Resize Width (Right Center) */}
 
-                                                    {/* 高さリサイズ（上中央？または下中央？） */}
+                                                    {/* Resize Height (Top Center? or Bottom Center?) */}
 
-                                                    {/* ハンドルを見た目の角に配置しましょう */}
-                                                    {/* 見た目の右上: デカルト (x+w, y+h)。SVG (x+w, -(y+h)) */}
+                                                    {/* Let's place handles at visual corners */}
+                                                    {/* Top-Right Visual: Cartesian (x+w, y+h). SVG (x+w, -(y+h)) */}
 
                                                     <rect x={(s.x + s.w) * BASE_SCALE - 5} y={toSvgY(s.y + s.h) * BASE_SCALE - 5} width="10" height="10" fill="yellow" stroke="blue" strokeWidth="2" className="cursor-nwse-resize" onPointerDown={(e) => onDown(e, i, null, 'both')} />
 
-                                                    {/* 幅（右） */}
+                                                    {/* Width (Right) */}
                                                     <rect x={(s.x + s.w) * BASE_SCALE - 5} y={toSvgY(s.y + s.h / 2) * BASE_SCALE - 5} width="10" height="10" fill="lightblue" stroke="blue" strokeWidth="2" className="cursor-ew-resize" onPointerDown={(e) => onDown(e, i, null, 'horizontal')} />
 
-                                                    {/* 高さ（上） - デカルトでは上は y+h */}
+                                                    {/* Height (Top) - In Cartesian, Top is y+h */}
                                                     <rect x={(s.x + s.w / 2) * BASE_SCALE - 5} y={toSvgY(s.y + s.h) * BASE_SCALE - 5} width="10" height="10" fill="lightgreen" stroke="blue" strokeWidth="2" className="cursor-ns-resize" onPointerDown={(e) => onDown(e, i, null, 'vertical')} />
 
-                                                    {/* 削除ボタン（右上 + オフセット） */}
+                                                    {/* Delete Button (Top-Right + offset) */}
                                                     <g transform={`translate(${(s.x + s.w) * BASE_SCALE + 10}, ${toSvgY(s.y + s.h) * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(i)}>
                                                         <circle r="8" fill="red" />
                                                         <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
@@ -227,17 +227,11 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
 
     useEffect(() => {
         if (assetFromStore && dragRef.current.mode === 'idle') {
-             // entities/shapes構造の処理
-             let normalized = deepClone(assetFromStore);
+             // Handle entities/shapes structure
+             const normalized = deepClone(assetFromStore);
              if (!normalized.entities && normalized.shapes) {
                  normalized.entities = normalized.shapes;
                  delete normalized.shapes;
-             }
-
-             // ロード時/更新時にバウンディングボックスを再計算して、現在のデータと一致させる
-             const bounds = calculateAssetBounds(normalized);
-             if (normalized.w !== bounds.w || normalized.h !== bounds.h || normalized.boundX !== bounds.boundX || normalized.boundY !== bounds.boundY) {
-                  normalized = { ...normalized, ...bounds };
              }
              setLocalAsset(normalized);
         }
@@ -246,9 +240,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
     if (!localAsset) return null;
 
     const updateLocalEntities = (newEntities) => {
-        let updated = { ...localAsset, entities: newEntities, isDefaultShape: false };
-        const bounds = calculateAssetBounds(updated);
-        updated = { ...updated, ...bounds };
+        const updated = { ...localAsset, entities: newEntities, isDefaultShape: false };
         setLocalAsset(updated);
     };
 
@@ -295,11 +287,11 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         if ((pointIndex === 'startAngle' || pointIndex === 'endAngle') && shapeIndex !== null && currentEntities[shapeIndex]) {
             e.stopPropagation();
             setSelectedShapeIndices([shapeIndex]);
-            // 角度計算のために、SVGスクリーン座標での中心が必要
+            // For angle calculation, we need center in SVG screen coords
             const shape = currentEntities[shapeIndex];
             const cx_svg = (shape.cx !== undefined ? shape.cx : 0) * BASE_SCALE;
             const cy_svg = toSvgY(shape.cy !== undefined ? shape.cy : 0) * BASE_SCALE;
-            // スクリーン座標
+            // Screen coords
             const screenCx = cx_svg * viewState.scale + viewState.x + rect.left;
             const screenCy = cy_svg * viewState.scale + viewState.y + rect.top;
 
@@ -329,8 +321,8 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
 
             dragRef.current = { mode: 'draggingRotation', cx: screenCx, cy: screenCy, initialRotation: shape.rotation || 0, startAngle: 0 };
             const mx = e.clientX; const my = e.clientY;
-            // SVG空間での角度 (CW)
-            // スクリーンYは下に増加 (SVG標準)
+            // Angle in SVG space (CW)
+            // Screen Y increases Down (SVG standard)
             dragRef.current.startAngle = Math.atan2(my - dragRef.current.cy, mx - dragRef.current.cx) * 180 / Math.PI;
             setCursorMode('draggingRotation');
             return;
@@ -437,7 +429,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             const targetShape = newEntities[targetIdx];
             const resizeMode = dragRef.current.resizeMode;
 
-            // デカルトリサイズロジック
+            // Cartesian Resize Logic
             if (resizeMode === 'both') {
                 let newW = dragRef.current.shapeW + dx;
                 let newH = dragRef.current.shapeH + dy;
@@ -501,7 +493,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             }
             pts[selectedPointIndex] = { ...pts[selectedPointIndex], x: nx, y: ny };
             newEntities[targetIdx].points = pts;
-            // ポリゴンのバウンディングボックス更新
+            // Update Bounds for Polygon
             if (newEntities[targetIdx].type === 'polygon') {
                 const xs = pts.map(p => p.x); const ys = pts.map(p => p.y);
                 newEntities[targetIdx].x = Math.min(...xs);
@@ -525,9 +517,9 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             updateLocalEntities(newEntities);
         } else if (mode === 'draggingAngle' && selectedShapeIndices.length > 0) {
             const targetIdx = selectedShapeIndices[0];
-            // SVG空間での角度 (CW)
+            // Angle in SVG space (CW)
             const angleSvg = Math.atan2(e.clientY - dragRef.current.cy, e.clientX - dragRef.current.cx) * 180 / Math.PI;
-            // デカルト座標へ変換 (CCW)
+            // Convert to Cartesian (CCW)
             const angleCart = toCartesianRotation(angleSvg);
 
             const deg = (angleCart + 360) % 360;
@@ -540,7 +532,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
             const targetIdx = selectedShapeIndices[0];
             const currentAngleSvg = Math.atan2(e.clientY - dragRef.current.cy, e.clientX - dragRef.current.cx) * 180 / Math.PI;
             const deltaSvg = currentAngleSvg - dragRef.current.startAngle;
-            // デカルトでは回転はCCW
+            // Rotation is CCW in Cartesian
             const deltaCart = toCartesianRotation(deltaSvg);
 
             let newRot = (dragRef.current.initialRotation + deltaCart + 360) % 360;
@@ -552,9 +544,9 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         } else if (mode === 'draggingRadius' && selectedShapeIndices.length > 0) {
             const targetIdx = selectedShapeIndices[0];
             const dx = (e.clientX - dragRef.current.sx) / scale;
-            // 半径はスカラーです。rxにdxをそのまま使いますか？それとも大きさ？
-            // 通常、ハンドルをドラッグすると大きさが変わります。
-            // 簡略化: 元のコードのようにdxを使用します。
+            // Radius is scalar, just use dx for rx? or magnitude?
+            // Usually dragging handle changes magnitude.
+            // Simplified: just use dx for now as in original code.
 
             let newVal = dragRef.current.initialVal + dx;
             if (!e.shiftKey) newVal = Math.round(newVal / SNAP_UNIT) * SNAP_UNIT;
@@ -572,9 +564,39 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         let finalAsset = { ...localAssetRef.current };
 
         if (dragRef.current.mode !== 'idle' && dragRef.current.mode !== 'marquee' && dragRef.current.mode !== 'panning') {
-            const bounds = calculateAssetBounds(finalAsset);
-            if (finalAsset.w !== bounds.w || finalAsset.h !== bounds.h || finalAsset.boundX !== bounds.boundX || finalAsset.boundY !== bounds.boundY) {
-                finalAsset = { ...finalAsset, ...bounds };
+             const entities = finalAsset.entities || [];
+             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+             let hasPoints = false;
+
+             entities.forEach(s => {
+                if (s.points) {
+                    hasPoints = true;
+                    s.points.forEach(p => {
+                        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+                        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+                    });
+                } else if (s.type === 'ellipse' || s.type === 'arc' || s.type === 'circle') {
+                    hasPoints = true;
+                    const cx = s.cx !== undefined ? s.cx : (s.x + s.w / 2);
+                    const cy = s.cy !== undefined ? s.cy : (s.y + s.h / 2);
+                    const rx = s.rx !== undefined ? s.rx : (s.w / 2);
+                    const ry = s.ry !== undefined ? s.ry : (s.h / 2);
+                    if (cx - rx < minX) minX = cx - rx; if (cx + rx > maxX) maxX = cx + rx;
+                    if (cy - ry < minY) minY = cy - ry; if (cy + ry > maxY) maxY = cy + ry;
+                } else {
+                    hasPoints = true;
+                    const x = s.x || 0; const y = s.y || 0; const w = s.w || 0; const h = s.h || 0;
+                    if (x < minX) minX = x; if (x + w > maxX) maxX = x + w;
+                    if (y < minY) minY = y; if (y + h > maxY) maxY = y + h;
+                }
+            });
+
+            if (hasPoints && minX !== Infinity) {
+                const w = Math.round(maxX - minX); const h = Math.round(maxY - minY);
+                const bx = Math.round(minX); const by = Math.round(minY);
+                if (finalAsset.w !== w || finalAsset.h !== h || finalAsset.boundX !== bx || finalAsset.boundY !== by) {
+                    finalAsset = { ...finalAsset, boundX: bx, boundY: by, w, h };
+                }
             }
             setLocalAssets(prev => prev.map(a => a.id === designTargetId ? finalAsset : a));
         }
