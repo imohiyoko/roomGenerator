@@ -9,6 +9,8 @@ import { DesignCanvas } from '../components/DesignCanvas';
 import { LayoutProperties } from '../components/LayoutProperties';
 import { DesignProperties } from '../components/DesignProperties';
 import { Ruler } from '../components/Ruler';
+import { useAutoSave } from '../hooks/useAutoSave';
+import { useKeyboardControls } from '../hooks/useKeyboardControls';
 
 const Editor = () => {
     const { id } = useParams();
@@ -42,14 +44,11 @@ const Editor = () => {
     const selectedPointIndex = useStore(state => state.selectedPointIndex);
     const setSelectedPointIndex = useStore(state => state.setSelectedPointIndex);
 
-    const colorPalette = useStore(state => state.colorPalette);
     const defaultColors = useStore(state => state.defaultColors);
     const globalAssets = useStore(state => state.globalAssets);
 
     // Actions
-    const addToPalette = useStore(state => state.addToPalette);
     const loadProject = useStore(state => state.loadProject);
-    const saveProjectData = useStore(state => state.saveProjectData);
     const addInstance = useStore(state => state.addInstance);
     const addText = useStore(state => state.addText);
 
@@ -65,54 +64,9 @@ const Editor = () => {
         }
     }, [id]);
 
-    // Auto-Save (Debounced)
-    useEffect(() => {
-        if (!currentProjectId) return;
-        const timer = setTimeout(() => {
-            saveProjectData();
-        }, 1000);
-        return () => clearTimeout(timer);
-    }, [localAssets, instances, currentProjectId]);
-
-
-    // Keyboard Pan (WASD / Arrows)
-    useEffect(() => {
-        const PAN_STEP = 50;
-        const handleKeyDown = (e) => {
-            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-
-            // Undo/Redo Shortcuts
-            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-                e.preventDefault();
-                if (e.shiftKey) {
-                    redo();
-                } else {
-                    undo();
-                }
-                return;
-            }
-             if ((e.ctrlKey || e.metaKey) && e.key === 'y') { // Windows Redo Standard
-                e.preventDefault();
-                redo();
-                return;
-            }
-
-            let dx = 0, dy = 0;
-            switch (e.key.toLowerCase()) {
-                case 'w': case 'arrowup': dy = PAN_STEP; break;
-                case 's': case 'arrowdown': dy = -PAN_STEP; break;
-                case 'a': case 'arrowleft': dx = PAN_STEP; break;
-                case 'd': case 'arrowright': dx = -PAN_STEP; break;
-                default: return;
-            }
-            if (dx !== 0 || dy !== 0) {
-                e.preventDefault();
-                setViewState(p => ({ ...p, x: p.x + dx, y: p.y + dy }));
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [undo, redo]);
+    // Custom Hooks
+    useAutoSave();
+    useKeyboardControls();
 
     // Throttled Add Instance
     const lastAddRef = useRef(0);
@@ -203,21 +157,9 @@ const Editor = () => {
             {/* Properties Panel */}
             <div className="w-72 flex-shrink-0 border-l bg-white z-20 shadow-sm flex flex-col">
                 {mode === 'layout' ? (
-                    <LayoutProperties
-                        instances={instances} setInstances={setInstances}
-                        selectedIds={selectedIds} assets={allAssets} setSelectedIds={setSelectedIds}
-                        setMode={setMode} setDesignTargetId={setDesignTargetId}
-                    />
+                    <LayoutProperties />
                 ) : (
-                    <DesignProperties
-                        assets={allAssets} designTargetId={designTargetId}
-                        setLocalAssets={setLocalAssets} setGlobalAssets={setGlobalAssets}
-                        selectedShapeIndices={selectedShapeIndices} setSelectedShapeIndices={setSelectedShapeIndices}
-                        selectedPointIndex={selectedPointIndex} setSelectedPointIndex={setSelectedPointIndex}
-                        setDesignTargetId={setDesignTargetId}
-                        palette={colorPalette} onAddToPalette={addToPalette}
-                        defaultColors={defaultColors}
-                    />
+                    <DesignProperties />
                 )}
             </div>
         </div>

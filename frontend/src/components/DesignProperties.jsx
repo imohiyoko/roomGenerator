@@ -5,14 +5,25 @@ import { NumberInput } from './NumberInput';
 import { fromMM, toMM, createRectPath, createTrianglePath, deepClone } from '../lib/utils';
 import { useStore } from '../store';
 
-export const DesignProperties = ({ assets, designTargetId, setLocalAssets, setGlobalAssets, setDesignTargetId, palette, onAddToPalette, defaultColors }) => {
+export const DesignProperties = () => {
     // Select state from store
+    const localAssets = useStore(state => state.localAssets);
+    const globalAssets = useStore(state => state.globalAssets);
+    const designTargetId = useStore(state => state.designTargetId);
+    const setLocalAssets = useStore(state => state.setLocalAssets);
+    const setGlobalAssets = useStore(state => state.setGlobalAssets);
+    const setDesignTargetId = useStore(state => state.setDesignTargetId);
+    const palette = useStore(state => state.colorPalette);
+    const onAddToPalette = useStore(state => state.addToPalette);
+    const defaultColors = useStore(state => state.defaultColors);
+
     const selectedShapeIndices = useStore(state => state.selectedShapeIndices);
     const setSelectedShapeIndices = useStore(state => state.setSelectedShapeIndices);
     const selectedPointIndex = useStore(state => state.selectedPointIndex);
     const setSelectedPointIndex = useStore(state => state.setSelectedPointIndex);
 
-    const asset = assets.find(a => a.id === designTargetId);
+    const allAssets = [...localAssets, ...globalAssets];
+    const asset = allAssets.find(a => a.id === designTargetId);
 
     // 未選択時
     if (!asset) {
