@@ -1,5 +1,6 @@
 import { API } from '../lib/api';
 import { syncAssetColors, forkAsset } from '../domain/assetService';
+import { normalizeAsset } from '../lib/utils'; // Import normalize helper
 
 const DEFAULT_COLORS = { room: '#fdfcdc', furniture: '#8fbc8f', fixture: '#cccccc' };
 
@@ -24,11 +25,17 @@ export const createProjectSlice = (set, get) => ({
             API.getPalette()
         ]);
 
-        const globalAssets = (globalAssetsData || []).map(a => ({ ...a, source: 'global' }));
+        // Normalize global assets to use entities
+        const globalAssets = (globalAssetsData || []).map(a => {
+            const normalized = normalizeAsset(a); // Helper from utils
+            return { ...normalized, source: 'global' };
+        });
+
         const colorPalette = paletteData?.colors || [];
         const defaultColors = paletteData?.defaults || DEFAULT_COLORS;
 
-        let loadedAssets = projectData?.assets || [];
+        // Normalize loaded local assets
+        let loadedAssets = (projectData?.assets || []).map(normalizeAsset);
         let instances = projectData?.instances || [];
 
         // Logic: Fork Global Assets if Project Empty
@@ -36,6 +43,7 @@ export const createProjectSlice = (set, get) => ({
             loadedAssets = globalAssets.map(ga => forkAsset(ga, defaultColors));
         } else {
             // Sync existing local assets
+            // Note: syncAssetColors also handles basic normalization if missed
             loadedAssets = syncAssetColors(loadedAssets, defaultColors);
         }
 

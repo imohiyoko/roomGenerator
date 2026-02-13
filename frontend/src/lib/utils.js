@@ -3,6 +3,17 @@ import { BASE_SCALE } from './constants';
 export const toMM = (val) => Math.round(val * 10);
 export const fromMM = (val) => val / 10;
 
+// Coordinate System Conversion (Cartesian Y-Up <-> SVG Y-Down)
+// SVG Origin is Top-Left (Y increases Down). Cartesian Origin is Bottom-Left (Y increases Up).
+// For rendering, we map Cartesian Y to SVG Y by flipping the sign.
+// Note: This assumes a relative transformation or centering is applied elsewhere (e.g. viewState translation).
+export const toSvgY = (y) => -y;
+export const toCartesianY = (y) => -y;
+export const toSvgRotation = (deg) => -deg;
+export const toCartesianRotation = (deg) => -deg;
+export const toSvgAngle = (deg) => -deg;
+export const toCartesianAngle = (deg) => -deg;
+
 export const deepClone = (obj) => {
     if (obj === null || typeof obj !== 'object') return obj;
     return JSON.parse(JSON.stringify(obj));
@@ -16,59 +27,62 @@ export const createRectPath = (w, h, x = 0, y = 0) => [
 ];
 
 export const createTrianglePath = (w, h, x = 0, y = 0) => [
-    { x: x + w / 2, y: y, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false },
-    { x: x + w, y: y + h, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false },
-    { x: x, y: y + h, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false },
+    { x: x + w / 2, y: y + h, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false }, // Top vertex
+    { x: x + w, y: y, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false },     // Bottom Right
+    { x: x, y: y, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false },         // Bottom Left
 ];
 
 export const normalizeAsset = (asset) => {
     if (!asset) return null;
-    let shapes = asset.shapes || [];
-    if (shapes.length === 0) {
+    let entities = asset.entities || asset.shapes || []; // Fallback to shapes for migration
+    if (entities.length === 0) {
         if (asset.shape === 'rect' || !asset.shape) {
-            shapes.push({ type: 'polygon', points: createRectPath(asset.w || 60, asset.h || 60), color: asset.color });
+            entities.push({ type: 'polygon', points: createRectPath(asset.w || 60, asset.h || 60), color: asset.color, layer: 'default' });
         } else if (asset.shape === 'polygon' && asset.points) {
             const pts = asset.points.map(p => ({ x: p.x, y: p.y, h1: { x: 0, y: 0 }, h2: { x: 0, y: 0 }, isCurve: false }));
-            shapes.push({ type: 'polygon', points: pts, color: asset.color });
+            entities.push({ type: 'polygon', points: pts, color: asset.color, layer: 'default' });
         } else if (asset.shape === 'circle') {
-            shapes.push({ type: 'circle', x: 0, y: 0, w: asset.w || 60, h: asset.h || 60, color: asset.color });
+            entities.push({ type: 'circle', x: 0, y: 0, w: asset.w || 60, h: asset.h || 60, color: asset.color, layer: 'default' });
         }
     }
-    return { ...asset, shapes, w: asset.w || 60, h: asset.h || 60 };
+    // Remove old 'shapes' if moving to entities, but for now just ensure entities is populated
+    // We return 'entities' property.
+    return { ...asset, entities, shapes: undefined, w: asset.w || 60, h: asset.h || 60 };
 };
 
-// 新しいパス生成：handles配列対応
-// handles: [] = 直線, handles: [{x,y}] = 二次ベジェ, handles: [{x,y},{x,y}] = 三次ベジェ, それ以上 = 連続曲線
+// SVG Path Generation with Cartesian -> SVG Coordinate Conversion
+// Handles flipping Y axis
 export const generateSvgPath = (points) => {
     if (!points || points.length === 0) return "";
-    let d = `M ${points[0].x * BASE_SCALE} ${points[0].y * BASE_SCALE}`;
+
+    const tx = (x) => x * BASE_SCALE;
+    const ty = (y) => toSvgY(y) * BASE_SCALE;
+
+    let d = `M ${tx(points[0].x)} ${ty(points[0].y)}`;
     for (let i = 0; i < points.length; i++) {
         const curr = points[i];
         const next = points[(i + 1) % points.length];
         const handles = curr.handles || [];
 
         if (handles.length === 0) {
-            // 旧形式との互換: isCurve/h1/h2がある場合
             if (curr.isCurve || next.isCurve) {
-                const cp1x = (curr.x + (curr.h2?.x || 0)) * BASE_SCALE;
-                const cp1y = (curr.y + (curr.h2?.y || 0)) * BASE_SCALE;
-                const cp2x = (next.x + (next.h1?.x || 0)) * BASE_SCALE;
-                const cp2y = (next.y + (next.h1?.y || 0)) * BASE_SCALE;
-                d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x * BASE_SCALE} ${next.y * BASE_SCALE}`;
+                // Legacy curve support
+                const cp1x = tx(curr.x + (curr.h2?.x || 0));
+                const cp1y = ty(curr.y + (curr.h2?.y || 0));
+                const cp2x = tx(next.x + (next.h1?.x || 0));
+                const cp2y = ty(next.y + (next.h1?.y || 0));
+                d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${tx(next.x)} ${ty(next.y)}`;
             } else {
-                d += ` L ${next.x * BASE_SCALE} ${next.y * BASE_SCALE}`;
+                d += ` L ${tx(next.x)} ${ty(next.y)}`;
             }
         } else if (handles.length === 1) {
-            // 二次ベジェ曲線 (Q)
             const h = handles[0];
-            d += ` Q ${h.x * BASE_SCALE} ${h.y * BASE_SCALE}, ${next.x * BASE_SCALE} ${next.y * BASE_SCALE}`;
+            d += ` Q ${tx(h.x)} ${ty(h.y)}, ${tx(next.x)} ${ty(next.y)}`;
         } else if (handles.length === 2) {
-            // 三次ベジェ曲線 (C)
             const h1 = handles[0];
             const h2 = handles[1];
-            d += ` C ${h1.x * BASE_SCALE} ${h1.y * BASE_SCALE}, ${h2.x * BASE_SCALE} ${h2.y * BASE_SCALE}, ${next.x * BASE_SCALE} ${next.y * BASE_SCALE}`;
+            d += ` C ${tx(h1.x)} ${ty(h1.y)}, ${tx(h2.x)} ${ty(h2.y)}, ${tx(next.x)} ${ty(next.y)}`;
         } else {
-            // 複数のハンドル: 連続曲線として描画
             const step = 1 / handles.length;
             let lastX = curr.x, lastY = curr.y;
             for (let j = 0; j < handles.length; j++) {
@@ -76,12 +90,11 @@ export const generateSvgPath = (points) => {
                 const t = (j + 1) * step;
                 const endX = curr.x + (next.x - curr.x) * t;
                 const endY = curr.y + (next.y - curr.y) * t;
-                d += ` Q ${h.x * BASE_SCALE} ${h.y * BASE_SCALE}, ${endX * BASE_SCALE} ${endY * BASE_SCALE}`;
+                d += ` Q ${tx(h.x)} ${ty(h.y)}, ${tx(endX)} ${ty(endY)}`;
                 lastX = endX; lastY = endY;
             }
-            // 最後の点へ直線
             if (Math.abs(lastX - next.x) > 0.01 || Math.abs(lastY - next.y) > 0.01) {
-                d += ` L ${next.x * BASE_SCALE} ${next.y * BASE_SCALE}`;
+                d += ` L ${tx(next.x)} ${ty(next.y)}`;
             }
         }
     }
@@ -89,39 +102,95 @@ export const generateSvgPath = (points) => {
     return d;
 };
 
-// 統一楕円SVGパス生成（楕円・扇形・弓形対応）
+// Generate Ellipse/Arc Path with Cartesian -> SVG Conversion
 export const generateEllipsePath = (shape) => {
+    // Cartesian inputs
     const { cx = 0, cy = 0, rx = 50, ry = 50, startAngle = 0, endAngle = 360, arcMode = 'sector', rotation = 0 } = shape;
+
+    // Convert to SVG coordinates
+    const cxs = cx * BASE_SCALE;
+    const cys = toSvgY(cy) * BASE_SCALE;
     const rxs = rx * BASE_SCALE;
     const rys = ry * BASE_SCALE;
-    const cxs = cx * BASE_SCALE;
-    const cys = cy * BASE_SCALE;
 
-    // 完全な楕円の場合
-    const angleDiff = ((endAngle - startAngle + 360) % 360) || 360;
-    if (angleDiff >= 360) {
-        // 完全な楕円は2つの円弧で描画
-        return `M ${cxs - rxs} ${cys} A ${rxs} ${rys} 0 1 1 ${cxs + rxs} ${cys} A ${rxs} ${rys} 0 1 1 ${cxs - rxs} ${cys}`;
-    }
+    // Angles: In Cartesian, angle increases CCW. In SVG (with Y-down), angle increases CW.
+    // To match visual appearance: angle_svg = -angle_cartesian.
+    // However, we also need to account for the fact that 0 degrees is East in both.
+    // Let's use standard math with flipped Y.
+    // x = cx + rx * cos(theta)
+    // y_cart = cy + ry * sin(theta)
+    // y_svg = -y_cart = -cy - ry * sin(theta) = cys - rys * sin(theta)
+    // In SVG path 'A' command, the coordinate system is local.
+    // Ideally we just calculate start/end points in SVG space.
 
-    // 部分円弧の場合
+    // Start/End angles in Cartesian (CCW from East)
     const startRad = (startAngle * Math.PI) / 180;
     const endRad = (endAngle * Math.PI) / 180;
 
-    // 楕円上の始点・終点
-    const x1 = cxs + rxs * Math.cos(startRad);
-    const y1 = cys + rys * Math.sin(startRad);
-    const x2 = cxs + rxs * Math.cos(endRad);
-    const y2 = cys + rys * Math.sin(endRad);
+    // Calculate start/end points in Cartesian, then convert to SVG
+    // x = cx + rx * cos(theta) (rotated by rotation)
+    // y = cy + ry * sin(theta) (rotated by rotation)
 
+    // Simplified approach: Calculate points in local unrotated space, then rotate, then translate, then flip Y.
+    // But SVG path 'A' command handles rotation.
+    // The rotation parameter in 'A' command is X-axis rotation.
+    // If we flip Y, the rotation direction effectively flips.
+    // SVG Rotation is CW. Cartesian Rotation is CCW.
+    // So svg_rotation = -cartesian_rotation.
+
+    // Calculate points in SVG Space directly
+    // P_svg = (cx, -cy) + (rx * cos(-theta), ry * sin(-theta))  <-- Wait, ry is radius, always positive.
+    // y_svg = -y_cart = - (cy + ry * sin(theta)) = -cy - ry * sin(theta).
+    // This is equivalent to Center(cx, -cy) + Radius(rx, ry) at Angle(-theta).
+    // So we use -startAngle and -endAngle.
+
+    const svgStartAngle = -startAngle;
+    const svgEndAngle = -endAngle;
+
+    // Normalize angles for arc calculation
+    // Note: SVG arcs go from start to end.
+    // If we go from -0 to -360 (CW), that's the same as 0 to 360 (CW in SVG).
+    // Cartesian 0 -> 90 (CCW) becomes SVG 0 -> -90 (CCW visually, or 360->270).
+
+    const startRadSvg = (svgStartAngle * Math.PI) / 180;
+    const endRadSvg = (svgEndAngle * Math.PI) / 180;
+
+    const x1 = cxs + rxs * Math.cos(startRadSvg);
+    const y1 = cys + rys * Math.sin(startRadSvg);
+    const x2 = cxs + rxs * Math.cos(endRadSvg);
+    const y2 = cys + rys * Math.sin(endRadSvg);
+
+    // Full ellipse check
+    const angleDiff = Math.abs(endAngle - startAngle); // Absolute difference in degrees
+    if (angleDiff >= 360) {
+        return `M ${cxs - rxs} ${cys} A ${rxs} ${rys} 0 1 1 ${cxs + rxs} ${cys} A ${rxs} ${rys} 0 1 1 ${cxs - rxs} ${cys}`;
+    }
+
+    // Large arc flag
+    // In SVG, large-arc-flag is 1 if angle > 180.
     const largeArc = angleDiff > 180 ? 1 : 0;
-    const sweepFlag = 1;
+
+    // Sweep flag
+    // Cartesian: Start -> End is CCW.
+    // SVG Angles: -Start -> -End.
+    // Example: Start=0, End=90. SVG: 0 -> -90. Delta = -90.
+    // This is a "negative" sweep in standard math, but SVG sweep-flag=0 is CCW (negative angle direction), sweep-flag=1 is CW.
+    // Wait: SVG 'A' command: sweep-flag=1 means "positive-angle direction" (Clockwise in SVG Y-down).
+    // We want to draw from Start(0) to End(90 Cartesian).
+    // In SVG coords: (r, 0) to (0, -r).
+    // To go from (r,0) to (0,-r) via the "top-right" quadrant, we are moving CCW in screen space.
+    // In SVG (Y-down), moving (1,0) -> (0,-1) is...
+    // (1,0) is Right. (0,-1) is Up.
+    // Right -> Up is CCW (Counter-Clockwise).
+    // In SVG standard, angles increase CW (Right -> Down).
+    // So we are moving in the *negative* angle direction.
+    // So sweep-flag should be 0.
+
+    const sweepFlag = 0; // CCW for Cartesian positive angle direction
 
     if (arcMode === 'sector') {
-        // 扇形: 中心→始点→円弧→終点→中心
         return `M ${cxs} ${cys} L ${x1} ${y1} A ${rxs} ${rys} 0 ${largeArc} ${sweepFlag} ${x2} ${y2} Z`;
     } else {
-        // 弓形(chord): 始点→円弧→終点→始点
         return `M ${x1} ${y1} A ${rxs} ${rys} 0 ${largeArc} ${sweepFlag} ${x2} ${y2} Z`;
     }
 };
@@ -130,6 +199,8 @@ export const getClientPos = (e, viewState, svgRect) => {
     const cx = e.clientX - svgRect.left;
     const cy = e.clientY - svgRect.top;
     const x = (cx - viewState.x) / viewState.scale / BASE_SCALE;
-    const y = (cy - viewState.y) / viewState.scale / BASE_SCALE;
+    const ySvg = (cy - viewState.y) / viewState.scale / BASE_SCALE;
+    // Convert SVG Y to Cartesian Y
+    const y = toCartesianY(ySvg);
     return { x, y };
 };
