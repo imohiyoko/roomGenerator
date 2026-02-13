@@ -1,11 +1,12 @@
-# Wails
+# --- Wails Specific ---
 build/bin/
 wails_temp/
 frontend/dist/
 frontend/node_modules/
+# Wailsが自動生成するチェックサムファイル（頻繁に変更されるため無視推奨）
 frontend/package.json.md5
 
-# Go
+# --- Go ---
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -13,38 +14,48 @@ frontend/package.json.md5
 *.so
 *.dylib
 
-# Test binary, built with `go test -c`
+# Test binary, built with 'go test -c'
 *.test
 
-# Output of the go coverage tool, specifically when used with LiteIDE
+# Output of the go coverage tool
 *.out
 
-# Dependency directories (remove the comment below to include it)
+# Dependency directories (vendor directory is rarely committed nowadays unless required)
 # vendor/
 
 # Go workspace file
 go.work
+go.work.sum
 
-# Node.js
+# --- Node.js ---
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# OS specific
+# --- OS Specific ---
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 desktop.ini
 
-# Editor/IDE
+# --- IDE / Editor ---
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+*.swn
 
-# App specific
+# --- App Specific (User Defined) ---
+# ユーザーデータディレクトリ
 data/
+# ログファイル
 app.log
+# バイナリ名（Mac/Linux用）
 roomGenerator
