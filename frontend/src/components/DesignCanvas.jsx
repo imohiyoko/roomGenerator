@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
-import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, getRotatedAABB } from '../lib/utils';
+import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, calculateAssetBounds } from '../lib/utils';
 import { useStore } from '../store';
 
 // Render Component
@@ -228,10 +228,16 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
     useEffect(() => {
         if (assetFromStore && dragRef.current.mode === 'idle') {
              // Handle entities/shapes structure
-             const normalized = deepClone(assetFromStore);
+             let normalized = deepClone(assetFromStore);
              if (!normalized.entities && normalized.shapes) {
                  normalized.entities = normalized.shapes;
                  delete normalized.shapes;
+             }
+
+             // Recalculate bounds on load/update to ensure they match current data
+             const bounds = calculateAssetBounds(normalized);
+             if (normalized.w !== bounds.w || normalized.h !== bounds.h || normalized.boundX !== bounds.boundX || normalized.boundY !== bounds.boundY) {
+                  normalized = { ...normalized, ...bounds };
              }
              setLocalAsset(normalized);
         }
@@ -240,27 +246,9 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
     if (!localAsset) return null;
 
     const updateLocalEntities = (newEntities) => {
-        // Calculate bounds with rotation
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        let hasEntities = newEntities.length > 0;
-
-        if (hasEntities) {
-            newEntities.forEach(s => {
-                const bounds = getRotatedAABB(s);
-                if (bounds.minX < minX) minX = bounds.minX;
-                if (bounds.maxX > maxX) maxX = bounds.maxX;
-                if (bounds.minY < minY) minY = bounds.minY;
-                if (bounds.maxY > maxY) maxY = bounds.maxY;
-            });
-        }
-
-        const updated = { ...localAsset, entities: newEntities, isDefaultShape: false };
-        if (hasEntities && minX !== Infinity) {
-            updated.boundX = Math.round(minX);
-            updated.boundY = Math.round(minY);
-            updated.w = Math.round(maxX - minX);
-            updated.h = Math.round(maxY - minY);
-        }
+        let updated = { ...localAsset, entities: newEntities, isDefaultShape: false };
+        const bounds = calculateAssetBounds(updated);
+        updated = { ...updated, ...bounds };
         setLocalAsset(updated);
     };
 
@@ -584,26 +572,9 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         let finalAsset = { ...localAssetRef.current };
 
         if (dragRef.current.mode !== 'idle' && dragRef.current.mode !== 'marquee' && dragRef.current.mode !== 'panning') {
-             const entities = finalAsset.entities || [];
-             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-             let hasEntities = entities.length > 0;
-
-             if (hasEntities) {
-                 entities.forEach(s => {
-                     const bounds = getRotatedAABB(s);
-                     if (bounds.minX < minX) minX = bounds.minX;
-                     if (bounds.maxX > maxX) maxX = bounds.maxX;
-                     if (bounds.minY < minY) minY = bounds.minY;
-                     if (bounds.maxY > maxY) maxY = bounds.maxY;
-                 });
-             }
-
-            if (hasEntities && minX !== Infinity) {
-                const w = Math.round(maxX - minX); const h = Math.round(maxY - minY);
-                const bx = Math.round(minX); const by = Math.round(minY);
-                if (finalAsset.w !== w || finalAsset.h !== h || finalAsset.boundX !== bx || finalAsset.boundY !== by) {
-                    finalAsset = { ...finalAsset, boundX: bx, boundY: by, w, h };
-                }
+            const bounds = calculateAssetBounds(finalAsset);
+            if (finalAsset.w !== bounds.w || finalAsset.h !== bounds.h || finalAsset.boundX !== bounds.boundX || finalAsset.boundY !== bounds.boundY) {
+                finalAsset = { ...finalAsset, ...bounds };
             }
             setLocalAssets(prev => prev.map(a => a.id === designTargetId ? finalAsset : a));
         }

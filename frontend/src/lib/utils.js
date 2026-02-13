@@ -1,4 +1,4 @@
-import { BASE_SCALE } from './constants';
+import { BASE_SCALE } from './constants.js';
 
 export const toMM = (val) => Math.round(val * 10);
 export const fromMM = (val) => val / 10;
@@ -205,85 +205,94 @@ export const getClientPos = (e, viewState, svgRect) => {
     return { x, y };
 };
 
-export const getRotatedAABB = (entity) => {
-    let vertices = [];
-    let cx = 0, cy = 0;
 
-    // 1. Determine Pivot (Center of Rotation)
+// Calculate Axis-Aligned Bounding Box for a rotated entity (Y-Up system)
+export const getRotatedAABB = (entity) => {
+    const rotation = entity.rotation || 0;
+    const rad = (rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    // Determine Center (Pivot)
+    let cx, cy;
     if (entity.type === 'ellipse' || entity.type === 'circle' || entity.type === 'arc') {
-        cx = entity.cx !== undefined ? entity.cx : ((entity.x || 0) + (entity.w || 0) / 2);
-        cy = entity.cy !== undefined ? entity.cy : ((entity.y || 0) + (entity.h || 0) / 2);
+        cx = entity.cx !== undefined ? entity.cx : (entity.x + entity.w / 2);
+        cy = entity.cy !== undefined ? entity.cy : (entity.y + entity.h / 2);
     } else {
         cx = (entity.x || 0) + (entity.w || 0) / 2;
         cy = (entity.y || 0) + (entity.h || 0) / 2;
     }
 
-    // 2. Determine Unrotated Vertices
-    if (entity.type === 'polygon' && entity.points) {
-        vertices = entity.points.map(p => ({ x: p.x, y: p.y }));
-    } else if (entity.type === 'ellipse' || entity.type === 'circle' || entity.type === 'arc') {
-        // Option A: Bounding Box Approximation
-        const rx = entity.rx !== undefined ? entity.rx : (entity.w / 2);
-        const ry = entity.ry !== undefined ? entity.ry : (entity.h / 2);
-        // Box corners relative to center cx, cy
-        vertices = [
-            { x: cx - rx, y: cy - ry },
-            { x: cx + rx, y: cy - ry },
-            { x: cx + rx, y: cy + ry },
-            { x: cx - rx, y: cy + ry }
-        ];
-    } else {
-        // Rect / Image
-        const x = entity.x || 0;
-        const y = entity.y || 0;
-        const w = entity.w || 0;
-        const h = entity.h || 0;
-        vertices = [
-            { x: x, y: y },
-            { x: x + w, y: y },
-            { x: x + w, y: y + h },
-            { x: x, y: y + h }
-        ];
-    }
+    // Case 1: Ellipse / Circle (Exact Calculation for tighter bounds)
+    if (entity.type === 'ellipse' || entity.type === 'circle') {
+        const rx = entity.rx !== undefined ? entity.rx : entity.w / 2;
+        const ry = entity.ry !== undefined ? entity.ry : entity.h / 2;
 
-    // 3. Rotate Vertices
-    const rotation = entity.rotation || 0;
-    if (rotation === 0) {
-        const xs = vertices.map(p => p.x);
-        const ys = vertices.map(p => p.y);
+        // Formula for the extent of a rotated ellipse
+        const halfW = Math.sqrt(Math.pow(rx * cos, 2) + Math.pow(ry * sin, 2));
+        const halfH = Math.sqrt(Math.pow(rx * sin, 2) + Math.pow(ry * cos, 2));
+
         return {
-            minX: Math.min(...xs),
-            maxX: Math.max(...xs),
-            minY: Math.min(...ys),
-            maxY: Math.max(...ys),
-            width: Math.max(...xs) - Math.min(...xs),
-            height: Math.max(...ys) - Math.min(...ys)
+            minX: cx - halfW,
+            maxX: cx + halfW,
+            minY: cy - halfH,
+            maxY: cy + halfH,
+            width: halfW * 2,
+            height: halfH * 2
         };
     }
 
-    const rad = (rotation * Math.PI) / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
+    // Case 2: Polygon / Rect (Vertex Rotation)
+    let points = [];
+    if (entity.type === 'polygon' && entity.points) {
+        points = entity.points;
+    } else {
+        // Create 4 corner points for Rect
+        const x = entity.x || 0; const y = entity.y || 0;
+        const w = entity.w || 0; const h = entity.h || 0;
+        points = [{x, y}, {x: x+w, y}, {x: x+w, y: y+h}, {x, y: y+h}];
+    }
 
-    const rotatedVertices = vertices.map(p => {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    points.forEach(p => {
+        // Rotate point around cx, cy (Cartesian CCW)
         const dx = p.x - cx;
         const dy = p.y - cy;
-        return {
-            x: dx * cos - dy * sin + cx,
-            y: dx * sin + dy * cos + cy
-        };
+        const rx = dx * cos - dy * sin + cx;
+        const ry = dx * sin + dy * cos + cy;
+        if (rx < minX) minX = rx; if (rx > maxX) maxX = rx;
+        if (ry < minY) minY = ry; if (ry > maxY) maxY = ry;
     });
 
-    // 4. Find Bounds
-    const xs = rotatedVertices.map(p => p.x);
-    const ys = rotatedVertices.map(p => p.y);
-
     return {
-        minX: Math.min(...xs),
-        maxX: Math.max(...xs),
-        minY: Math.min(...ys),
-        maxY: Math.max(...ys),
-        width: Math.max(...xs) - Math.min(...xs),
-        height: Math.max(...ys) - Math.min(...ys)
+        minX,
+        maxX,
+        minY,
+        maxY,
+        width: maxX - minX,
+        height: maxY - minY
+    };
+};
+
+export const calculateAssetBounds = (asset) => {
+    if (!asset || !asset.entities || asset.entities.length === 0) {
+        return { boundX: 0, boundY: 0, w: asset.w || 0, h: asset.h || 0 };
+    }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    asset.entities.forEach(entity => {
+        const bounds = getRotatedAABB(entity);
+        if (bounds.minX < minX) minX = bounds.minX;
+        if (bounds.maxX > maxX) maxX = bounds.maxX;
+        if (bounds.minY < minY) minY = bounds.minY;
+        if (bounds.maxY > maxY) maxY = bounds.maxY;
+    });
+
+    if (minX === Infinity) return { boundX: 0, boundY: 0, w: asset.w, h: asset.h };
+    return {
+        boundX: Math.round(minX),
+        boundY: Math.round(minY),
+        w: Math.round(maxX - minX),
+        h: Math.round(maxY - minY)
     };
 };
