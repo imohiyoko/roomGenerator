@@ -204,3 +204,87 @@ export const getClientPos = (e, viewState, svgRect) => {
     const y = toCartesianY(ySvg);
     return { x, y };
 };
+
+export const getRotatedAABB = (entity) => {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    if (entity.points) {
+        // Polygon / Path
+        entity.points.forEach(p => {
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.y > maxY) maxY = p.y;
+        });
+    } else if (entity.type === 'ellipse' || entity.type === 'circle' || entity.type === 'arc') {
+        const cx = entity.cx !== undefined ? entity.cx : (entity.x + entity.w / 2);
+        const cy = entity.cy !== undefined ? entity.cy : (entity.y + entity.h / 2);
+        const rx = entity.rx !== undefined ? entity.rx : (entity.w / 2);
+        const ry = entity.ry !== undefined ? entity.ry : (entity.h / 2);
+        const rotation = entity.rotation || 0;
+
+        if (rotation === 0) {
+            minX = cx - rx; maxX = cx + rx;
+            minY = cy - ry; maxY = cy + ry;
+        } else {
+            // Rotated Ellipse Bounds
+            const phi = rotation * Math.PI / 180;
+            const cosPhi = Math.cos(phi);
+            const sinPhi = Math.sin(phi);
+
+            // X Extrema
+            // dx/dt = -rx sin t cos phi - ry cos t sin phi = 0
+            // tan t = - (ry sin phi) / (rx cos phi)
+            const tanTx = - (ry * sinPhi) / (rx * cosPhi);
+            const tx = Math.atan(tanTx);
+            const x1 = cx + rx * Math.cos(tx) * cosPhi - ry * Math.sin(tx) * sinPhi;
+            const x2 = cx + rx * Math.cos(tx + Math.PI) * cosPhi - ry * Math.sin(tx + Math.PI) * sinPhi;
+            minX = Math.min(x1, x2);
+            maxX = Math.max(x1, x2);
+
+            // Y Extrema
+            // dy/dt = -rx sin t sin phi + ry cos t cos phi = 0
+            // tan t = (ry cos phi) / (rx sin phi)
+            const tanTy = (ry * cosPhi) / (rx * sinPhi);
+            const ty = Math.atan(tanTy);
+            const y1 = cy + rx * Math.cos(ty) * sinPhi + ry * Math.sin(ty) * cosPhi;
+            const y2 = cy + rx * Math.cos(ty + Math.PI) * sinPhi + ry * Math.sin(ty + Math.PI) * cosPhi;
+            minY = Math.min(y1, y2);
+            maxY = Math.max(y1, y2);
+        }
+    } else {
+        // Fallback for rect with x,y,w,h (no points)
+        const x = entity.x || 0;
+        const y = entity.y || 0;
+        const w = entity.w || 0;
+        const h = entity.h || 0;
+        minX = x; maxX = x + w;
+        minY = y; maxY = y + h;
+    }
+
+    return { minX, minY, maxX, maxY };
+};
+
+export const calculateAssetBounds = (asset) => {
+    const entities = asset.entities || asset.shapes || [];
+    if (entities.length === 0) {
+        return { boundX: 0, boundY: 0, w: asset.w || 0, h: asset.h || 0 };
+    }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    entities.forEach(entity => {
+        const bounds = getRotatedAABB(entity);
+        if (bounds.minX < minX) minX = bounds.minX;
+        if (bounds.maxX > maxX) maxX = bounds.maxX;
+        if (bounds.minY < minY) minY = bounds.minY;
+        if (bounds.maxY > maxY) maxY = bounds.maxY;
+    });
+
+    if (minX === Infinity) return { boundX: 0, boundY: 0, w: asset.w, h: asset.h };
+    return {
+        boundX: Math.round(minX),
+        boundY: Math.round(minY),
+        w: Math.round(maxX - minX),
+        h: Math.round(maxY - minY)
+    };
+};
