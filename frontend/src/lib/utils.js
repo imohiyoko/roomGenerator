@@ -377,3 +377,21 @@ export const getRotatedAABB = (entity) => {
         height: maxY - minY
     };
 };
+
+export const shiftEntity = (entity, dx, dy) => {
+    let ns = { ...entity };
+    if (ns.x !== undefined) ns.x += dx;
+    if (ns.y !== undefined) ns.y += dy;
+    if (ns.cx !== undefined) ns.cx += dx;
+    if (ns.cy !== undefined) ns.cy += dy;
+    if (ns.points) {
+        ns.points = ns.points.map(p => {
+            let np = { ...p, x: p.x + dx, y: p.y + dy };
+            if (p.handles) {
+                np.handles = p.handles.map(h => ({ x: h.x + dx, y: h.y + dy }));
+            }
+            return np;
+        });
+    }
+    return ns;
+};
