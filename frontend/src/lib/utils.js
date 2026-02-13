@@ -199,7 +199,8 @@ export const getClientPos = (e, viewState, svgRect) => {
 
 export const calculateAssetBounds = (asset) => {
     if (!asset || !asset.entities || asset.entities.length === 0) {
-        return { boundX: 0, boundY: 0, w: asset.w || 0, h: asset.h || 0 };
+        return { boundX: 0, boundY: 0, w: (asset && asset.w) || 0, h: (asset && asset.h) || 0 };
+
     }
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
