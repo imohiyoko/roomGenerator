@@ -73,13 +73,31 @@ export const DesignProperties = () => {
         setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
     };
 
+    // ポイントを更新する際に、ポリゴンのバウンディングボックス(x,y,w,h)も更新する
     const updatePoint = (k, v) => {
         if (asset.source === 'global' || targetIndex === null || selectedPointIndex === null) return;
         const newEntities = [...(asset.entities || [])];
         const newPts = [...newEntities[targetIndex].points];
         const newPt = { ...newPts[selectedPointIndex], [k]: v };
         newPts[selectedPointIndex] = newPt;
+
+        // ポイント更新
         newEntities[targetIndex].points = newPts;
+
+        // ポリゴンの場合、x,y,w,hを再計算
+        if (newEntities[targetIndex].type === 'polygon') {
+            const xs = newPts.map(p => p.x);
+            const ys = newPts.map(p => p.y);
+            const minX = Math.min(...xs);
+            const maxX = Math.max(...xs);
+            const minY = Math.min(...ys);
+            const maxY = Math.max(...ys);
+            newEntities[targetIndex].x = minX;
+            newEntities[targetIndex].y = minY;
+            newEntities[targetIndex].w = maxX - minX;
+            newEntities[targetIndex].h = maxY - minY;
+        }
+
         setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
     };
 
@@ -147,12 +165,6 @@ export const DesignProperties = () => {
         });
 
         if (groupMinX === Infinity || groupMinY === Infinity) return;
-
-        // 2. 左上基準でスケーリング (Cartesian: 左下はMinY)
-        // 待って、スケーリングロジック：通常は中心または最小/最小に関連しています。
-        // MinX, MinYに関連してスケーリングする場合:
-        // x' = minX + (x - minX) * scale.
-        // これはデカルト座標でも機能します。
 
         bulkUpdate(s => {
             let ns = { ...s };
@@ -445,15 +457,43 @@ export const DesignProperties = () => {
                                                     <NumberInput value={toMM(pt.x)} onChange={e => {
                                                         const newPts = [...selectedEntity.points];
                                                         newPts[idx] = { ...newPts[idx], x: fromMM(Number(e.target.value)) };
+
+                                                        // ポリゴンの再計算
+                                                        const xs = newPts.map(p => p.x);
+                                                        const ys = newPts.map(p => p.y);
+                                                        const minX = Math.min(...xs); const maxX = Math.max(...xs);
+                                                        const minY = Math.min(...ys); const maxY = Math.max(...ys);
+                                                        const w = maxX - minX;
+                                                        const h = maxY - minY;
+
                                                         const newEntities = [...(asset.entities || [])];
                                                         newEntities[targetIndex].points = newPts;
+                                                        newEntities[targetIndex].x = minX;
+                                                        newEntities[targetIndex].y = minY;
+                                                        newEntities[targetIndex].w = w;
+                                                        newEntities[targetIndex].h = h;
+
                                                         setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
                                                     }} className="flex-1 text-[10px] p-0.5 border rounded w-12 text-center" placeholder="X" />
                                                     <NumberInput value={toMM(pt.y)} onChange={e => {
                                                         const newPts = [...selectedEntity.points];
                                                         newPts[idx] = { ...newPts[idx], y: fromMM(Number(e.target.value)) };
+
+                                                        // ポリゴンの再計算
+                                                        const xs = newPts.map(p => p.x);
+                                                        const ys = newPts.map(p => p.y);
+                                                        const minX = Math.min(...xs); const maxX = Math.max(...xs);
+                                                        const minY = Math.min(...ys); const maxY = Math.max(...ys);
+                                                        const w = maxX - minX;
+                                                        const h = maxY - minY;
+
                                                         const newEntities = [...(asset.entities || [])];
                                                         newEntities[targetIndex].points = newPts;
+                                                        newEntities[targetIndex].x = minX;
+                                                        newEntities[targetIndex].y = minY;
+                                                        newEntities[targetIndex].w = w;
+                                                        newEntities[targetIndex].h = h;
+
                                                         setLocalAssets(p => p.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
                                                     }} className="flex-1 text-[10px] p-0.5 border rounded w-12 text-center" placeholder="Y" />
                                                     <button onClick={() => {

@@ -230,7 +230,18 @@ export const getRotatedAABB = (entity) => {
 
     // 中心（ピボット）を決定
     let cx, cy;
-    if (entity.type === 'ellipse' || entity.type === 'circle' || entity.type === 'arc') {
+    // ポリゴンでpointsがある場合は、現在のpointsから中心を再計算する
+    // (DesignPropertiesでの編集で x/y/w/h が古くなっている可能性があるため)
+    if (entity.type === 'polygon' && entity.points && entity.points.length > 0) {
+         const xs = entity.points.map(p => p.x);
+         const ys = entity.points.map(p => p.y);
+         const minX = Math.min(...xs);
+         const maxX = Math.max(...xs);
+         const minY = Math.min(...ys);
+         const maxY = Math.max(...ys);
+         cx = minX + (maxX - minX) / 2;
+         cy = minY + (maxY - minY) / 2;
+    } else if (entity.type === 'ellipse' || entity.type === 'circle' || entity.type === 'arc') {
         cx = entity.cx !== undefined ? entity.cx : ((entity.x || 0) + (entity.w || 0) / 2);
         cy = entity.cy !== undefined ? entity.cy : ((entity.y || 0) + (entity.h || 0) / 2);
     } else {
@@ -254,6 +265,9 @@ export const getRotatedAABB = (entity) => {
         let eDeg = endAngle % 360;
         if (eDeg < 0) eDeg += 360;
 
+        // 始点と終点が同じ（かつ360度差でない）場合は、範囲なし（点）として扱うか、
+        // 描画ロジックに合わせて処理する。描画側は360度差を判定している。
+        // ここでは差が360度以上なら完全な楕円とする。
         if (Math.abs(endAngle - startAngle) >= 360) {
             // 完全な楕円の公式
             const halfW = Math.sqrt(Math.pow(rx * cos, 2) + Math.pow(ry * sin, 2));
@@ -296,6 +310,9 @@ export const getRotatedAABB = (entity) => {
         const inRange = (tRad) => {
             let tDeg = (tRad * 180 / Math.PI) % 360;
             if (tDeg < 0) tDeg += 360;
+
+            // start == end の場合（かつ360度差でない）は範囲なし
+            if (sDeg === eDeg) return false;
 
             // 方向の確認: start -> end (CCW)
             // s < e の場合: s <= t <= e

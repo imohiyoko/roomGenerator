@@ -247,8 +247,8 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
 
     const updateLocalEntities = (newEntities) => {
         let updated = { ...localAsset, entities: newEntities, isDefaultShape: false };
-        const bounds = calculateAssetBounds(updated);
-        updated = { ...updated, ...bounds };
+        // ドラッグ中のパフォーマンス改善のため、バウンディングボックスの計算をスキップする
+        // バウンディングボックスは handleUp で再計算される
         setLocalAsset(updated);
     };
 
@@ -584,7 +584,10 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
     const handleDeleteShape = (index) => {
         if (!confirm('このシェイプを削除しますか？')) return;
         const newEntities = localAsset.entities.filter((_, i) => i !== index);
-        const updated = { ...localAsset, entities: newEntities, isDefaultShape: false };
+        let updated = { ...localAsset, entities: newEntities, isDefaultShape: false };
+        // 削除直後にバウンディングボックスを再計算して一貫性を保つ
+        const bounds = calculateAssetBounds(updated);
+        updated = { ...updated, ...bounds };
         setLocalAsset(updated);
         setLocalAssets(prev => prev.map(a => a.id === designTargetId ? updated : a));
         setSelectedShapeIndices([]);
