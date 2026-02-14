@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
-import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone } from '../lib/utils';
+import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, calculateAssetBounds } from '../lib/utils';
 import { useStore } from '../store';
 
 // Render Component
@@ -565,7 +565,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
 
         if (dragRef.current.mode !== 'idle' && dragRef.current.mode !== 'marquee' && dragRef.current.mode !== 'panning') {
             const entities = finalAsset.entities || [];
-import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, calculateAssetBounds } from '../lib/utils';
+            const bounds = calculateAssetBounds(entities);
             if (bounds) {
                 if (finalAsset.w !== bounds.w || finalAsset.h !== bounds.h || finalAsset.boundX !== bounds.boundX || finalAsset.boundY !== bounds.boundY) {
                     finalAsset = { ...finalAsset, ...bounds };
