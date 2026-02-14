@@ -565,7 +565,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
 
         if (dragRef.current.mode !== 'idle' && dragRef.current.mode !== 'marquee' && dragRef.current.mode !== 'panning') {
             const entities = finalAsset.entities || [];
-            const bounds = calculateAssetBounds(entities);
+import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, calculateAssetBounds } from '../lib/utils';
             if (bounds) {
                 if (finalAsset.w !== bounds.w || finalAsset.h !== bounds.h || finalAsset.boundX !== bounds.boundX || finalAsset.boundY !== bounds.boundY) {
                     finalAsset = { ...finalAsset, ...bounds };
