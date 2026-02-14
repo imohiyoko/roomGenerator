@@ -37,14 +37,17 @@ Before you begin, ensure you have the following installed:
 
 ## 3. Project Architecture
 
-Please refer to [ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed map of the file structure, backend API, and data flow.
+Please refer to **[docs/SYSTEM_MAP.md](docs/SYSTEM_MAP.md)** for a comprehensive map of the system, including backend API, data models, frontend routing, and key workflows.
+
+*   **Backend**: `app.go` (API), `models.go` (Data Structures), `defaults.go` (Initial Data).
+*   **Frontend**: `src/store/` (State), `src/domain/` (Business Logic), `src/components/` (UI).
 
 ## 4. Code Style & Patterns
 
 ### State Management
 We use **Zustand** for global state.
 *   State slices are located in `frontend/src/store/`.
-*   Complex logic (e.g., data transformation) should be kept in `frontend/src/domain/` or strictly inside store actions, not in UI components.
+*   Complex logic (e.g., project loading, data normalization) should be extracted to **Domain Services** in `frontend/src/domain/` (e.g., `projectService.js`), keeping the store clean.
 
 ### React Components
 *   **Functional Components**: Use standard functional components.
@@ -59,7 +62,9 @@ We use **Zustand** for global state.
     ```
 
 ### Backend (Go)
-*   The backend logic resides in `app.go`.
+*   The main API logic resides in `app.go`.
+*   Data structures are defined in `models.go`.
+*   Default asset generation logic is in `defaults.go`.
 *   If you modify `app.go` or other Go files, `wails dev` will automatically rebuild the application.
 *   New public methods on the `App` struct are automatically exposed to the frontend runtime.
 

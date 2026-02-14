@@ -1,8 +1,5 @@
 import { API } from '../lib/api';
-import { syncAssetColors, forkAsset } from '../domain/assetService';
-import { normalizeAsset } from '../lib/utils'; // Import normalize helper
-
-const DEFAULT_COLORS = { room: '#fdfcdc', furniture: '#8fbc8f', fixture: '#cccccc' };
+import { loadProjectService } from '../domain/projectService';
 
 export const createProjectSlice = (set, get) => ({
     projects: [],
@@ -19,40 +16,10 @@ export const createProjectSlice = (set, get) => ({
 
         set({ currentProjectId: projectId });
 
-        const [projectData, globalAssetsData, paletteData] = await Promise.all([
-            API.getProjectData(projectId),
-            API.getAssets(),
-            API.getPalette()
-        ]);
-
-        // Normalize global assets to use entities
-        const globalAssets = (globalAssetsData || []).map(a => {
-            const normalized = normalizeAsset(a); // Helper from utils
-            return { ...normalized, source: 'global' };
-        });
-
-        const colorPalette = paletteData?.colors || [];
-        const defaultColors = paletteData?.defaults || DEFAULT_COLORS;
-
-        // Normalize loaded local assets
-        let loadedAssets = (projectData?.assets || []).map(normalizeAsset);
-        let instances = projectData?.instances || [];
-
-        // Logic: Fork Global Assets if Project Empty
-        if (loadedAssets.length === 0) {
-            loadedAssets = globalAssets.map(ga => forkAsset(ga, defaultColors));
-        } else {
-            // Sync existing local assets
-            // Note: syncAssetColors also handles basic normalization if missed
-            loadedAssets = syncAssetColors(loadedAssets, defaultColors);
-        }
+        const data = await loadProjectService(projectId);
 
         set({
-            globalAssets,
-            colorPalette,
-            defaultColors,
-            localAssets: loadedAssets,
-            instances,
+            ...data,
             selectedIds: [],
             designTargetId: null,
             selectedShapeIndices: [],
