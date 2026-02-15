@@ -340,14 +340,16 @@ export const processResizing = (e, dragRefState, currentAsset, viewState, select
             newH = Math.round(newH / SNAP_UNIT) * SNAP_UNIT;
         }
         newEntities[targetIdx] = { ...targetShape, w: Math.max(10, newW), h: Math.max(10, newH) };
-    } else if (resizeMode === 'width') {
+    } else if (resizeMode === 'width' || resizeMode === 'horizontal') {
         let newW = dragRefState.shapeW + dx;
         if (!e.shiftKey) newW = Math.round(newW / SNAP_UNIT) * SNAP_UNIT;
         newEntities[targetIdx] = { ...targetShape, w: Math.max(10, newW) };
-    } else if (resizeMode === 'height') {
+    } else if (resizeMode === 'height' || resizeMode === 'vertical') {
         let newH = dragRefState.shapeH + dy;
         if (!e.shiftKey) newH = Math.round(newH / SNAP_UNIT) * SNAP_UNIT;
         newEntities[targetIdx] = { ...targetShape, h: Math.max(10, newH) };
+    }
+
     }
     return newEntities;
 };
