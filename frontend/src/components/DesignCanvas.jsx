@@ -399,7 +399,6 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         const newAsset = updateLocalAssetState(updates);
         setLocalAssets(prev => prev.map(a => a.id === designTargetId ? newAsset : a));
         setSelectedShapeIndices([]);
-        setSelectedPointIndex(null);
     };
 
     const entities = (localAsset && localAsset.entities && localAsset.entities.length > 0)
