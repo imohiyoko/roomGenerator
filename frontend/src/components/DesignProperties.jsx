@@ -2,7 +2,7 @@ import React from 'react';
 import { Icon, Icons } from './Icon';
 import { ColorPicker } from './ColorPicker';
 import { NumberInput } from './NumberInput';
-import { fromMM, toMM, createRectPath, createTrianglePath, deepClone } from '../lib/utils';
+import { fromMM, toMM, createRectPath, createTrianglePath, deepClone, calculateAssetBounds } from '../lib/utils';
 import { useStore } from '../store';
 
 export const DesignProperties = () => {
@@ -120,40 +120,14 @@ export const DesignProperties = () => {
         if (scale <= 0) return;
 
         // 1. グループのバウンディングボックス（左上）を計算
-        let groupMinX = Infinity;
-        let groupMinY = Infinity;
+        const selectedEntities = (asset.entities || []).filter((_, i) => selectedShapeIndices.includes(i));
+        const bounds = calculateAssetBounds(selectedEntities);
+        if (!bounds) return;
 
-        selectedShapeIndices.forEach(index => {
-            const s = (asset.entities || [])[index];
-            if (!s) return;
-            if (s.points) {
-                s.points.forEach(p => {
-                    if (p.x < groupMinX) groupMinX = p.x;
-                    if (p.y < groupMinY) groupMinY = p.y;
-                });
-            } else if (s.type === 'ellipse' || s.type === 'arc' || s.type === 'circle') {
-                const cx = s.cx !== undefined ? s.cx : (s.x + s.w / 2);
-                const cy = s.cy !== undefined ? s.cy : (s.y + s.h / 2);
-                const rx = s.rx !== undefined ? s.rx : (s.w / 2);
-                const ry = s.ry !== undefined ? s.ry : (s.h / 2);
-                if (cx - rx < groupMinX) groupMinX = cx - rx;
-                if (cy - ry < groupMinY) groupMinY = cy - ry;
-            } else {
-                const x = s.x || 0;
-                const y = s.y || 0;
-                if (x < groupMinX) groupMinX = x;
-                if (y < groupMinY) groupMinY = y;
-            }
-        });
-
-        if (groupMinX === Infinity || groupMinY === Infinity) return;
+        const groupMinX = bounds.boundX;
+        const groupMinY = bounds.boundY;
 
         // 2. 左上基準でスケーリング (Cartesian: Bottom-Left is MinY)
-        // Wait, scaling logic: usually relative to center or min/min.
-        // If we scale relative to MinX, MinY:
-        // x' = minX + (x - minX) * scale.
-        // This works for Cartesian too.
-
         bulkUpdate(s => {
             let ns = { ...s };
 
@@ -236,22 +210,15 @@ export const DesignProperties = () => {
         if (asset.source === 'global') return;
         const entities = asset.entities || [];
         if (entities.length === 0) return;
-        let minX = Infinity, minY = Infinity;
-        entities.forEach(s => {
-            if (s.points) {
-                s.points.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); });
-            } else if (s.type === 'ellipse' || s.type === 'circle') {
-                const cx = s.cx !== undefined ? s.cx : (s.x + s.w/2);
-                const cy = s.cy !== undefined ? s.cy : (s.y + s.h/2);
-                const rx = s.rx !== undefined ? s.rx : (s.w/2);
-                const ry = s.ry !== undefined ? s.ry : (s.h/2);
-                minX = Math.min(minX, cx - rx);
-                minY = Math.min(minY, cy - ry);
-            } else {
-                minX = Math.min(minX, s.x || 0); minY = Math.min(minY, s.y || 0);
-            }
-        });
-        if (minX === Infinity || (minX === 0 && minY === 0)) return;
+
+        const bounds = calculateAssetBounds(entities);
+        if (!bounds) return;
+
+        const minX = bounds.boundX;
+        const minY = bounds.boundY;
+
+        if (minX === 0 && minY === 0) return;
+
         const newEntities = entities.map(s => {
             if (s.points) return { ...s, points: s.points.map(p => ({ ...p, x: p.x - minX, y: p.y - minY })) };
             // For Rect/Ellipse
@@ -262,11 +229,11 @@ export const DesignProperties = () => {
             if (ns.cy !== undefined) ns.cy -= minY;
             return ns;
         });
-        // Recalc bounds
-        let maxX = 0, maxY = 0;
-        // Actually DesignCanvas recalculates bounds on Drag End. Here we should update bounds roughly or let DesignCanvas handle it on next interaction?
-        // Let's approximate.
-        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, entities: newEntities, isDefaultShape: false } : a));
+        // Update asset with approximate new bounds (moved to 0,0)
+        // DesignCanvas will refine if needed, but we know new boundX/Y is 0.
+        // Width/Height shouldn't change, just position.
+        const newBounds = { ...bounds, boundX: 0, boundY: 0 };
+        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? { ...a, ...newBounds, entities: newEntities, isDefaultShape: false } : a));
     };
 
     if (asset.source === 'global') return (
