@@ -1,7 +1,27 @@
-import { deepClone } from '../lib/utils';
+import { deepClone, calculateAssetBounds } from '../lib/utils';
 import { BASE_SCALE } from '../lib/constants';
 
 // --- Logic from store.js ---
+
+// Updates an asset with new entities and recalculates its bounding box.
+// This ensures that any modification to entities (add, remove, edit)
+// correctly updates the asset's overall dimensions and origin.
+export const updateAssetEntities = (asset, newEntities) => {
+    if (!asset) return null;
+
+    // Calculate new bounds based on the new entity list
+    const bounds = calculateAssetBounds(newEntities);
+
+    return {
+        ...asset,
+        entities: newEntities,
+        // If bounds were successfully calculated, merge them in.
+        // Otherwise keep existing (though usually bounds should be valid if entities exist)
+        ...(bounds || {}),
+        // Mark as modified so it doesn't auto-update from global defaults anymore
+        isDefaultShape: false
+    };
+};
 
 // Fork a global asset to a local one
 export const forkAsset = (asset, defaultColors) => {
