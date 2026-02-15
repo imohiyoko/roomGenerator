@@ -350,7 +350,6 @@ export const processResizing = (e, dragRefState, currentAsset, viewState, select
         newEntities[targetIdx] = { ...targetShape, h: Math.max(10, newH) };
     }
 
-    }
     return newEntities;
 };
 
