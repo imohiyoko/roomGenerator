@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
-import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, calculateAssetBounds } from '../lib/utils';
+import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, calculateAssetBounds, getRotatedAABB } from '../lib/utils';
 import { useStore } from '../store';
 import {
     initiatePanning, initiateMarquee, initiateResizing, initiateDraggingHandle,
@@ -149,6 +149,18 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
                                                         <line x1={cx} y1={cy} x2={ex * 0.6 + cx * 0.4} y2={ey * 0.6 + cy * 0.4} stroke="purple" strokeWidth="1" strokeDasharray="3,2" />
                                                         <circle cx={sx * 0.6 + cx * 0.4} cy={sy * 0.6 + cy * 0.4} r="5" fill="green" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'startAngle')} />
                                                         <circle cx={ex * 0.6 + cx * 0.4} cy={ey * 0.6 + cy * 0.4} r="5" fill="purple" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'endAngle')} />
+                                                    </g>
+                                                );
+                                            })()}
+                                            {/* Ellipse Delete Button */}
+                                            {isSelected && s.type === 'ellipse' && (() => {
+                                                const bounds = getRotatedAABB(s);
+                                                if (!bounds) return null;
+                                                const { maxX, maxY } = bounds;
+                                                return (
+                                                    <g transform={`translate(${maxX * BASE_SCALE + 10}, ${toSvgY(maxY) * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(e, i)}>
+                                                        <circle r="8" fill="red" />
+                                                        <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
                                                     </g>
                                                 );
                                             })()}
