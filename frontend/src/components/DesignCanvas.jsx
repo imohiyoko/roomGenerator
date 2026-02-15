@@ -2,6 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
 import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, calculateAssetBounds } from '../lib/utils';
 import { useStore } from '../store';
+import {
+    initiatePanning, initiateMarquee, initiateResizing, initiateDraggingHandle,
+    initiateDraggingAngle, initiateDraggingRotation, initiateDraggingRadius,
+    initiateDraggingPoint, initiateDraggingShape,
+    processPanning, processMarquee, processResizing, processDraggingShape,
+    processDraggingPoint, processDraggingHandle, processDraggingAngle,
+    processDraggingRotation, processDraggingRadius
+} from './DesignCanvas.logic';
 
 // Render Component
 const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, selectedPointIndex, onDown, onMove, onUp, onDeleteShape, svgRef, marquee, cursorMode }) => {
@@ -248,129 +256,62 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         if (svgRef.current && e.pointerId) svgRef.current.setPointerCapture(e.pointerId);
         const rect = svgRef.current.getBoundingClientRect();
 
+        // Panning
         if (e.button === 1) {
-            dragRef.current = { mode: 'panning', sx: e.clientX, sy: e.clientY, vx: viewState.x, vy: viewState.y };
-            setCursorMode('panning');
+            dragRef.current = initiatePanning(e, viewState, setCursorMode);
             return;
         }
 
+        // Marquee
         if (shapeIndex === null && e.button === 0) {
-            setMarquee({ sx: e.clientX, sy: e.clientY, ex: e.clientX, ey: e.clientY });
-            if (!e.ctrlKey && !e.metaKey) setSelectedShapeIndices([]);
-            dragRef.current = { mode: 'marquee', sx: e.clientX, sy: e.clientY, prevSelectedIndices: e.ctrlKey || e.metaKey ? [...selectedShapeIndices] : [] };
+            dragRef.current = initiateMarquee(e, setMarquee, setSelectedShapeIndices, selectedShapeIndices);
             return;
         }
 
         const currentEntities = localAsset.entities || [];
 
+        // Resizing
         if (resizeMode && shapeIndex !== null && currentEntities[shapeIndex]) {
-            e.stopPropagation();
-            setSelectedShapeIndices([shapeIndex]);
-            setSelectedPointIndex(null);
-            const shape = currentEntities[shapeIndex];
-            dragRef.current = { mode: 'resizing', sx: e.clientX, sy: e.clientY, shapeW: shape.w, shapeH: shape.h, shapeX: shape.x || 0, shapeY: shape.y || 0, resizeMode };
-            setCursorMode('resizing');
+            dragRef.current = initiateResizing(e, shapeIndex, localAsset, resizeMode, setSelectedShapeIndices, setSelectedPointIndex, setCursorMode);
             return;
         }
 
+        // Handle Dragging
         if (handleIndex !== null && pointIndex !== null && shapeIndex !== null && currentEntities[shapeIndex]) {
-            e.stopPropagation();
-            setSelectedShapeIndices([shapeIndex]);
-            setSelectedPointIndex(pointIndex);
-            const shape = currentEntities[shapeIndex];
-            const handle = shape.points[pointIndex].handles[handleIndex];
-            dragRef.current = { mode: 'draggingHandle', sx: e.clientX, sy: e.clientY, handleX: handle.x, handleY: handle.y, handleIndex };
-            setCursorMode('draggingHandle');
+            dragRef.current = initiateDraggingHandle(e, shapeIndex, pointIndex, handleIndex, localAsset, setSelectedShapeIndices, setSelectedPointIndex, setCursorMode);
             return;
         }
 
+        // Angle Dragging
         if ((pointIndex === 'startAngle' || pointIndex === 'endAngle') && shapeIndex !== null && currentEntities[shapeIndex]) {
-            e.stopPropagation();
-            setSelectedShapeIndices([shapeIndex]);
-            // For angle calculation, we need center in SVG screen coords
-            const shape = currentEntities[shapeIndex];
-            const cx_svg = (shape.cx !== undefined ? shape.cx : 0) * BASE_SCALE;
-            const cy_svg = toSvgY(shape.cy !== undefined ? shape.cy : 0) * BASE_SCALE;
-            // Screen coords
-            const screenCx = cx_svg * viewState.scale + viewState.x + rect.left;
-            const screenCy = cy_svg * viewState.scale + viewState.y + rect.top;
-
-            dragRef.current = { mode: 'draggingAngle', targetProp: pointIndex, cx: screenCx, cy: screenCy };
-            setCursorMode('draggingAngle');
+            dragRef.current = initiateDraggingAngle(e, shapeIndex, pointIndex, localAsset, viewState, rect, setSelectedShapeIndices, setCursorMode);
             return;
         }
 
+        // Rotation Dragging
         if (pointIndex === 'rotation' && shapeIndex !== null && currentEntities[shapeIndex]) {
-            e.stopPropagation();
-            setSelectedShapeIndices([shapeIndex]);
-            const shape = currentEntities[shapeIndex];
-
-            let cx_cart = 0, cy_cart = 0;
-            if (shape.type === 'ellipse' || shape.type === 'circle' || shape.type === 'arc') {
-                cx_cart = shape.cx || 0; cy_cart = shape.cy || 0;
-            } else {
-                cx_cart = (shape.x || 0) + (shape.w || 0) / 2;
-                cy_cart = (shape.y || 0) + (shape.h || 0) / 2;
-            }
-
-            const cx_svg = cx_cart * BASE_SCALE;
-            const cy_svg = toSvgY(cy_cart) * BASE_SCALE;
-
-            const screenCx = cx_svg * viewState.scale + viewState.x + rect.left;
-            const screenCy = cy_svg * viewState.scale + viewState.y + rect.top;
-
-            dragRef.current = { mode: 'draggingRotation', cx: screenCx, cy: screenCy, initialRotation: shape.rotation || 0, startAngle: 0 };
-            const mx = e.clientX; const my = e.clientY;
-            // Angle in SVG space (CW)
-            // Screen Y increases Down (SVG standard)
-            dragRef.current.startAngle = Math.atan2(my - dragRef.current.cy, mx - dragRef.current.cx) * 180 / Math.PI;
-            setCursorMode('draggingRotation');
+            dragRef.current = initiateDraggingRotation(e, shapeIndex, localAsset, viewState, rect, setSelectedShapeIndices, setCursorMode);
             return;
         }
 
+        // Radius Dragging
         if ((pointIndex === 'rx' || pointIndex === 'ry') && shapeIndex !== null && currentEntities[shapeIndex]) {
-            e.stopPropagation();
-            setSelectedShapeIndices([shapeIndex]);
-            const shape = currentEntities[shapeIndex];
-            dragRef.current = { mode: 'draggingRadius', targetProp: pointIndex, sx: e.clientX, sy: e.clientY, initialVal: shape[pointIndex] || 50 };
-            setCursorMode('ew-resize');
+            dragRef.current = initiateDraggingRadius(e, shapeIndex, pointIndex, localAsset, setSelectedShapeIndices, setCursorMode);
             return;
         }
 
+        // Point Dragging
         if (pointIndex !== null && shapeIndex !== null && currentEntities[shapeIndex]) {
-            e.stopPropagation();
-            setSelectedShapeIndices([shapeIndex]);
-            setSelectedPointIndex(pointIndex);
-            const shape = currentEntities[shapeIndex];
-            const pt = shape.points[pointIndex];
-            dragRef.current = { mode: 'draggingPoint', sx: e.clientX, sy: e.clientY, pointX: pt.x, pointY: pt.y };
-            setCursorMode('draggingPoint');
+            dragRef.current = initiateDraggingPoint(e, shapeIndex, pointIndex, localAsset, setSelectedShapeIndices, setSelectedPointIndex, setCursorMode);
             return;
         }
 
+        // Shape Dragging
         if (shapeIndex !== null) {
-            e.stopPropagation();
-            let newSelectedIndices = [...selectedShapeIndices];
-            if (e.ctrlKey || e.metaKey) {
-                if (newSelectedIndices.includes(shapeIndex)) newSelectedIndices = newSelectedIndices.filter(i => i !== shapeIndex);
-                else newSelectedIndices.push(shapeIndex);
-                setSelectedShapeIndices(newSelectedIndices);
-            } else {
-                if (!newSelectedIndices.includes(shapeIndex)) {
-                    newSelectedIndices = [shapeIndex];
-                    setSelectedShapeIndices(newSelectedIndices);
-                }
-            }
-            if (newSelectedIndices.length === 0) return;
-            const initialShapes = newSelectedIndices.map(i => ({ index: i, data: deepClone(currentEntities[i]) }));
-            const anchorIndex = newSelectedIndices[0];
-            const anchorShape = currentEntities[anchorIndex];
-            const anchorX = anchorShape.x !== undefined ? anchorShape.x : (anchorShape.cx !== undefined ? anchorShape.cx : 0);
-            const anchorY = anchorShape.y !== undefined ? anchorShape.y : (anchorShape.cy !== undefined ? anchorShape.cy : 0);
-            dragRef.current = { mode: 'draggingShape', sx: e.clientX, sy: e.clientY, initialShapes: initialShapes, anchorX, anchorY };
-            setCursorMode('draggingShape');
+            dragRef.current = initiateDraggingShape(e, shapeIndex, localAsset, selectedShapeIndices, setSelectedShapeIndices, setCursorMode);
             return;
         }
+
         setSelectedShapeIndices([]);
         setSelectedPointIndex(null);
     };
@@ -380,179 +321,35 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         if (mode === 'idle') return;
         e.preventDefault();
 
-        const currentAsset = localAsset;
-        const scale = viewState.scale * BASE_SCALE;
-
         if (mode === 'panning') {
-            const dx = e.clientX - dragRef.current.sx;
-            const dy = e.clientY - dragRef.current.sy;
-            setViewState(p => ({ ...p, x: dragRef.current.vx + dx, y: dragRef.current.vy + dy }));
-        } else if (mode === 'marquee') {
-            setMarquee(prev => prev ? { ...prev, ex: e.clientX, ey: e.clientY } : null);
-            if (svgRef.current) {
-                const rect = svgRef.current.getBoundingClientRect();
-                const toWorld = (screenX, screenY) => {
-                     const svgX = (screenX - rect.left - viewState.x) / scale;
-                     const svgY = (screenY - rect.top - viewState.y) / scale;
-                     return { x: svgX, y: toCartesianY(svgY) }; // Convert to Cartesian
-                };
-                const p1 = toWorld(dragRef.current.sx, dragRef.current.sy);
-                const p2 = toWorld(e.clientX, e.clientY);
-                const minX = Math.min(p1.x, p2.x); const maxX = Math.max(p1.x, p2.x);
-                const minY = Math.min(p1.y, p2.y); const maxY = Math.max(p1.y, p2.y);
+            processPanning(e, dragRef.current, setViewState);
+            return;
+        }
 
-                const inBoxIndices = (currentAsset.entities || []).map((s, i) => {
-                    let cx, cy;
-                    if (s.type === 'polygon' && s.points) {
-                        const xs = s.points.map(p => p.x); const ys = s.points.map(p => p.y);
-                        cx = Math.min(...xs) + (Math.max(...xs) - Math.min(...xs)) / 2;
-                        cy = Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) / 2;
-                    } else if (s.type === 'ellipse' || s.type === 'arc' || s.type === 'circle') {
-                        cx = s.cx !== undefined ? s.cx : (s.x + s.w / 2);
-                        cy = s.cy !== undefined ? s.cy : (s.y + s.h / 2);
-                    } else {
-                        cx = (s.x || 0) + (s.w || 0) / 2;
-                        cy = (s.y || 0) + (s.h || 0) / 2;
-                    }
-                    return (cx >= minX && cx <= maxX && cy >= minY && cy <= maxY) ? i : -1;
-                }).filter(i => i !== -1);
-                const initialSelected = dragRef.current.prevSelectedIndices || [];
-                setSelectedShapeIndices([...new Set([...initialSelected, ...inBoxIndices])]);
-            }
-        } else if (mode === 'resizing' && selectedShapeIndices.length > 0) {
-            const dx = (e.clientX - dragRef.current.sx) / scale;
-            const dy_svg = (e.clientY - dragRef.current.sy) / scale;
-            const dy = toCartesianY(dy_svg); // Flip Y delta
+        if (mode === 'marquee') {
+            processMarquee(e, dragRef.current, setMarquee, svgRef, viewState, localAsset, setSelectedShapeIndices);
+            return;
+        }
 
-            const newEntities = deepClone(currentAsset.entities);
-            const targetIdx = selectedShapeIndices[0];
-            const targetShape = newEntities[targetIdx];
-            const resizeMode = dragRef.current.resizeMode;
+        let newEntities = null;
 
-            // Cartesian Resize Logic
-            if (resizeMode === 'both') {
-                let newW = dragRef.current.shapeW + dx;
-                let newH = dragRef.current.shapeH + dy;
-                if (!e.shiftKey) {
-                    newW = Math.round(newW / SNAP_UNIT) * SNAP_UNIT;
-                    newH = Math.round(newH / SNAP_UNIT) * SNAP_UNIT;
-                }
-                newEntities[targetIdx] = { ...targetShape, w: Math.max(10, newW), h: Math.max(10, newH) };
-            } else if (resizeMode === 'width') {
-                let newW = dragRef.current.shapeW + dx;
-                if (!e.shiftKey) newW = Math.round(newW / SNAP_UNIT) * SNAP_UNIT;
-                newEntities[targetIdx] = { ...targetShape, w: Math.max(10, newW) };
-            } else if (resizeMode === 'height') {
-                let newH = dragRef.current.shapeH + dy;
-                if (!e.shiftKey) newH = Math.round(newH / SNAP_UNIT) * SNAP_UNIT;
-                newEntities[targetIdx] = { ...targetShape, h: Math.max(10, newH) };
-            }
-            updateLocalEntities(newEntities);
+        if (mode === 'resizing' && selectedShapeIndices.length > 0) {
+            newEntities = processResizing(e, dragRef.current, localAsset, viewState, selectedShapeIndices);
         } else if (mode === 'draggingShape') {
-            const rawDx = (e.clientX - dragRef.current.sx) / scale;
-            const rawDySvg = (e.clientY - dragRef.current.sy) / scale;
-            const rawDy = toCartesianY(rawDySvg); // Flip
-
-            let moveX = rawDx; let moveY = rawDy;
-            if (currentAsset.snap && !e.shiftKey) {
-                const anchorX = dragRef.current.anchorX || 0;
-                const anchorY = dragRef.current.anchorY || 0;
-                const targetX = anchorX + rawDx;
-                const targetY = anchorY + rawDy;
-                const snappedX = Math.round(targetX / SNAP_UNIT) * SNAP_UNIT;
-                const snappedY = Math.round(targetY / SNAP_UNIT) * SNAP_UNIT;
-                moveX = snappedX - anchorX;
-                moveY = snappedY - anchorY;
-            }
-
-            const newEntities = deepClone(currentAsset.entities);
-            const initialShapes = dragRef.current.initialShapes || [];
-            initialShapes.forEach(({ index, data }) => {
-                let updatedShape = { ...newEntities[index] };
-                if (data.x !== undefined) updatedShape.x = (data.x || 0) + moveX;
-                if (data.y !== undefined) updatedShape.y = (data.y || 0) + moveY;
-                if (data.cx !== undefined) updatedShape.cx = (data.cx || 0) + moveX;
-                if (data.cy !== undefined) updatedShape.cy = (data.cy || 0) + moveY;
-                if (data.points) updatedShape.points = data.points.map(p => ({ ...p, x: p.x + moveX, y: p.y + moveY }));
-                newEntities[index] = updatedShape;
-            });
-            updateLocalEntities(newEntities);
+            newEntities = processDraggingShape(e, dragRef.current, localAsset, viewState);
         } else if (mode === 'draggingPoint' && selectedShapeIndices.length > 0 && selectedPointIndex !== null) {
-            const dx = (e.clientX - dragRef.current.sx) / scale;
-            const dy_svg = (e.clientY - dragRef.current.sy) / scale;
-            const dy = toCartesianY(dy_svg);
-
-            const newEntities = deepClone(currentAsset.entities);
-            const targetIdx = selectedShapeIndices[0];
-            const pts = [...newEntities[targetIdx].points];
-            let nx = dragRef.current.pointX + dx;
-            let ny = dragRef.current.pointY + dy;
-            if (!e.shiftKey) {
-                nx = Math.round(nx / SNAP_UNIT) * SNAP_UNIT;
-                ny = Math.round(ny / SNAP_UNIT) * SNAP_UNIT;
-            }
-            pts[selectedPointIndex] = { ...pts[selectedPointIndex], x: nx, y: ny };
-            newEntities[targetIdx].points = pts;
-            // Update Bounds for Polygon
-            if (newEntities[targetIdx].type === 'polygon') {
-                const xs = pts.map(p => p.x); const ys = pts.map(p => p.y);
-                newEntities[targetIdx].x = Math.min(...xs);
-                newEntities[targetIdx].y = Math.min(...ys);
-                newEntities[targetIdx].w = Math.max(...xs) - newEntities[targetIdx].x;
-                newEntities[targetIdx].h = Math.max(...ys) - newEntities[targetIdx].y;
-            }
-            updateLocalEntities(newEntities);
+            newEntities = processDraggingPoint(e, dragRef.current, localAsset, viewState, selectedShapeIndices, selectedPointIndex);
         } else if (mode === 'draggingHandle' && selectedShapeIndices.length > 0 && selectedPointIndex !== null) {
-            const dx = (e.clientX - dragRef.current.sx) / scale;
-            const dy_svg = (e.clientY - dragRef.current.sy) / scale;
-            const dy = toCartesianY(dy_svg);
-
-            const newEntities = deepClone(currentAsset.entities);
-            const targetIdx = selectedShapeIndices[0];
-            const pts = [...newEntities[targetIdx].points];
-            const pt = { ...pts[selectedPointIndex] };
-            const handles = [...pt.handles];
-            handles[dragRef.current.handleIndex] = { x: dragRef.current.handleX + dx, y: dragRef.current.handleY + dy };
-            pt.handles = handles; pts[selectedPointIndex] = pt; newEntities[targetIdx].points = pts;
-            updateLocalEntities(newEntities);
+            newEntities = processDraggingHandle(e, dragRef.current, localAsset, viewState, selectedShapeIndices, selectedPointIndex);
         } else if (mode === 'draggingAngle' && selectedShapeIndices.length > 0) {
-            const targetIdx = selectedShapeIndices[0];
-            // Angle in SVG space (CW)
-            const angleSvg = Math.atan2(e.clientY - dragRef.current.cy, e.clientX - dragRef.current.cx) * 180 / Math.PI;
-            // Convert to Cartesian (CCW)
-            const angleCart = toCartesianRotation(angleSvg);
-
-            const deg = (angleCart + 360) % 360;
-            const snapped = e.shiftKey ? deg : Math.round(deg / 15) * 15;
-
-            const newEntities = deepClone(currentAsset.entities);
-            newEntities[targetIdx][dragRef.current.targetProp] = snapped;
-            updateLocalEntities(newEntities);
+            newEntities = processDraggingAngle(e, dragRef.current, localAsset, selectedShapeIndices);
         } else if (mode === 'draggingRotation' && selectedShapeIndices.length > 0) {
-            const targetIdx = selectedShapeIndices[0];
-            const currentAngleSvg = Math.atan2(e.clientY - dragRef.current.cy, e.clientX - dragRef.current.cx) * 180 / Math.PI;
-            const deltaSvg = currentAngleSvg - dragRef.current.startAngle;
-            // Rotation is CCW in Cartesian
-            const deltaCart = toCartesianRotation(deltaSvg);
-
-            let newRot = (dragRef.current.initialRotation + deltaCart + 360) % 360;
-            if (!e.shiftKey) newRot = Math.round(newRot / 15) * 15;
-
-            const newEntities = deepClone(currentAsset.entities);
-            newEntities[targetIdx].rotation = newRot;
-            updateLocalEntities(newEntities);
+            newEntities = processDraggingRotation(e, dragRef.current, localAsset, selectedShapeIndices);
         } else if (mode === 'draggingRadius' && selectedShapeIndices.length > 0) {
-            const targetIdx = selectedShapeIndices[0];
-            const dx = (e.clientX - dragRef.current.sx) / scale;
-            // Radius is scalar, just use dx for rx? or magnitude?
-            // Usually dragging handle changes magnitude.
-            // Simplified: just use dx for now as in original code.
+            newEntities = processDraggingRadius(e, dragRef.current, localAsset, viewState, selectedShapeIndices);
+        }
 
-            let newVal = dragRef.current.initialVal + dx;
-            if (!e.shiftKey) newVal = Math.round(newVal / SNAP_UNIT) * SNAP_UNIT;
-            newVal = Math.max(1, newVal);
-            const newEntities = deepClone(currentAsset.entities);
-            newEntities[targetIdx][dragRef.current.targetProp] = newVal;
+        if (newEntities) {
             updateLocalEntities(newEntities);
         }
     };
