@@ -176,7 +176,7 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
                                                 const maxY = Math.max(...s.points.map(p => p.y));
 
                                                 return (
-                                                    <g transform={`translate(${maxX * BASE_SCALE + 10}, ${toSvgY(maxY) * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(i)}>
+                                                    <g transform={`translate(${maxX * BASE_SCALE + 10}, ${toSvgY(maxY) * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(e, i)}>
                                                         <circle r="8" fill="red" />
                                                         <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
                                                     </g>
@@ -212,7 +212,7 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
                                                     <rect x={(s.x + s.w / 2) * BASE_SCALE - 5} y={toSvgY(s.y + s.h) * BASE_SCALE - 5} width="10" height="10" fill="lightgreen" stroke="blue" strokeWidth="2" className="cursor-ns-resize" onPointerDown={(e) => onDown(e, i, null, 'vertical')} />
 
                                                     {/* Delete Button (Top-Right + offset) */}
-                                                    <g transform={`translate(${(s.x + s.w) * BASE_SCALE + 10}, ${toSvgY(s.y + s.h) * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(i)}>
+                                                    <g transform={`translate(${(s.x + s.w) * BASE_SCALE + 10}, ${toSvgY(s.y + s.h) * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(e, i)}>
                                                         <circle r="8" fill="red" />
                                                         <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
                                                     </g>
@@ -432,8 +432,13 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
      * Updates asset bounds and clears selection.
      * @param {number} index - Index of the shape to delete.
      */
-    const handleDeleteShape = (index) => {
-        if (!confirm('このシェイプを削除しますか？')) return;
+    const handleDeleteShape = (e, index) => {
+        e.stopPropagation();
+        if (!confirm('このシェイプを削除しますか？')) {
+            dragRef.current = { mode: 'idle' };
+            setCursorMode('idle');
+            return;
+        }
         const newEntities = localAsset.entities.filter((_, i) => i !== index);
 
         // Calculate new bounds after deletion
