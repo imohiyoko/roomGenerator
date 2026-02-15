@@ -524,7 +524,7 @@ export const DesignProperties = () => {
                                 className={`flex justify-between items-center text-xs p-1 rounded border cursor-pointer ${selectedShapeIndices.includes(i) ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}
                             >
                                 <span className="font-bold text-gray-500">#{i + 1} {s.type}</span>
-                            <button onClick={(e) => { e.stopPropagation(); if (!confirm('削除？')) return; const newEntities = (asset.entities || []).filter((_, idx) => idx !== i); setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a)); setSelectedShapeIndices(p => p.filter(idx => idx !== i)); }} className="text-red-400 hover:text-red-600 px-1">×</button>
+                        <button onClick={(e) => { e.stopPropagation(); if (!confirm('削除？')) return; const newEntities = (asset.entities || []).filter((_, idx) => idx !== i); setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a)); setSelectedShapeIndices([]); }} className="text-red-400 hover:text-red-600 px-1">×</button>
                             </div>
                         ))}
                     </div>
