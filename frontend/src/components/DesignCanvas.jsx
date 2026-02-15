@@ -351,7 +351,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
 
         // Shape Dragging
         if (shapeIndex !== null) {
-            dragRef.current = initiateDraggingShape(e, shapeIndex, localAsset, selectedShapeIndices, setSelectedShapeIndices, setCursorMode);
+            dragRef.current = initiateDraggingShape(e, shapeIndex, localAsset, selectedShapeIndices, setSelectedShapeIndices, setSelectedPointIndex, setCursorMode);
             return;
         }
 

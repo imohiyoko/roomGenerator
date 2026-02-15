@@ -227,7 +227,7 @@ export const initiateDraggingPoint = (e, shapeIndex, pointIndex, currentAsset, s
  * @param {Function} setCursorMode - カーソルモード設定関数
  * @returns {Object} 新しいドラッグ状態
  */
-export const initiateDraggingShape = (e, shapeIndex, currentAsset, selectedShapeIndices, setSelectedShapeIndices, setCursorMode) => {
+export const initiateDraggingShape = (e, shapeIndex, currentAsset, selectedShapeIndices, setSelectedShapeIndices, setSelectedPointIndex, setCursorMode) => {
     e.stopPropagation();
     let newSelectedIndices = [...selectedShapeIndices];
     if (e.ctrlKey || e.metaKey) {
@@ -240,6 +240,7 @@ export const initiateDraggingShape = (e, shapeIndex, currentAsset, selectedShape
             setSelectedShapeIndices(newSelectedIndices);
         }
     }
+    setSelectedPointIndex(null);
 
     if (newSelectedIndices.length === 0) return { mode: 'idle' };
 
