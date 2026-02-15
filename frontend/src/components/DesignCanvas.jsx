@@ -278,6 +278,13 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
 
     if (!localAsset) return null;
 
+    const updateLocalAssetState = (updates) => {
+        const newAsset = { ...localAssetRef.current, ...updates };
+        setLocalAsset(newAsset);
+        localAssetRef.current = newAsset;
+        return newAsset;
+    };
+
     const updateLocalEntities = (newEntities) => {
         const updated = { ...localAsset, entities: newEntities, isDefaultShape: false };
         setLocalAsset(updated);
@@ -402,19 +409,20 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         setMarquee(null);
         setCursorMode('idle');
 
-        let finalAsset = { ...localAssetRef.current };
-
         if (dragRef.current.mode !== 'idle' && dragRef.current.mode !== 'marquee' && dragRef.current.mode !== 'panning') {
-            const entities = finalAsset.entities || [];
+            const currentAsset = localAssetRef.current;
+            const entities = currentAsset.entities || [];
             const bounds = calculateAssetBounds(entities);
+
+            let updates = {};
             if (bounds) {
-                if (finalAsset.w !== bounds.w || finalAsset.h !== bounds.h || finalAsset.boundX !== bounds.boundX || finalAsset.boundY !== bounds.boundY) {
-                    finalAsset = { ...finalAsset, ...bounds };
+                if (currentAsset.w !== bounds.w || currentAsset.h !== bounds.h || currentAsset.boundX !== bounds.boundX || currentAsset.boundY !== bounds.boundY) {
+                    updates = bounds;
                 }
             }
-            setLocalAsset(finalAsset);
-            localAssetRef.current = finalAsset;
-            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? finalAsset : a));
+
+            const newAsset = updateLocalAssetState(updates);
+            setLocalAssets(prev => prev.map(a => a.id === designTargetId ? newAsset : a));
         }
         dragRef.current = { mode: 'idle' };
     };
@@ -430,16 +438,14 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
 
         // Calculate new bounds after deletion
         const bounds = calculateAssetBounds(newEntities);
-        const updated = {
-            ...localAsset,
+        const updates = {
             entities: newEntities,
             isDefaultShape: false,
             ...(bounds || {})
         };
 
-        setLocalAsset(updated);
-        localAssetRef.current = updated;
-        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? updated : a));
+        const newAsset = updateLocalAssetState(updates);
+        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? newAsset : a));
         setSelectedShapeIndices([]);
         setSelectedPointIndex(null);
     };
