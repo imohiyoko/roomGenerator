@@ -11,7 +11,25 @@ import {
     processDraggingRotation, processDraggingRadius
 } from './DesignCanvas.logic';
 
-// Render Component
+/**
+ * Render component for the Design Canvas.
+ * Handles the visual representation of assets, shapes, handles, and interactions.
+ *
+ * @param {Object} props - The component props.
+ * @param {Object} props.viewState - Current view state (x, y, scale).
+ * @param {Object} props.asset - The asset being designed.
+ * @param {Array} props.entities - List of shapes/entities in the asset.
+ * @param {Array<number>} props.selectedShapeIndices - Indices of selected shapes.
+ * @param {number|null} props.selectedPointIndex - Index of the selected point (vertex).
+ * @param {Function} props.onDown - Pointer down handler.
+ * @param {Function} props.onMove - Pointer move handler.
+ * @param {Function} props.onUp - Pointer up handler.
+ * @param {Function} props.onDeleteShape - Handler for deleting a shape.
+ * @param {React.RefObject} props.svgRef - Ref to the SVG element.
+ * @param {Object|null} props.marquee - Marquee selection state.
+ * @param {string} props.cursorMode - Current cursor mode.
+ * @returns {JSX.Element} The rendered SVG canvas.
+ */
 const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, selectedPointIndex, onDown, onMove, onUp, onDeleteShape, svgRef, marquee, cursorMode }) => {
     // Apply cursor style
     useEffect(() => {
@@ -215,6 +233,19 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
     );
 };
 
+/**
+ * Main container for the Design Mode canvas.
+ * Manages state, event handling, and delegates rendering to DesignCanvasRender.
+ *
+ * @param {Object} props - The component props.
+ * @param {Object} props.viewState - Current view state (x, y, scale).
+ * @param {Function} props.setViewState - Setter for view state.
+ * @param {Array} props.assets - List of all available assets.
+ * @param {string} props.designTargetId - ID of the asset currently being designed.
+ * @param {Function} props.setLocalAssets - Setter for updating local assets.
+ * @param {Function} props.setGlobalAssets - Setter for updating global assets (unused but passed).
+ * @returns {JSX.Element|null} The DesignCanvas component.
+ */
 export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, setLocalAssets, setGlobalAssets }) => {
     const selectedShapeIndices = useStore(state => state.selectedShapeIndices);
     const setSelectedShapeIndices = useStore(state => state.setSelectedShapeIndices);
@@ -253,6 +284,10 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         localAssetRef.current = updated;
     };
 
+    /**
+     * Handles pointer down events on the canvas.
+     * Initiates dragging, resizing, panning, or marquee selection.
+     */
     const handleDown = (e, shapeIndex = null, pointIndex = null, resizeMode = null, handleIndex = null) => {
         if (svgRef.current && e.pointerId) svgRef.current.setPointerCapture(e.pointerId);
         const rect = svgRef.current.getBoundingClientRect();
@@ -317,6 +352,10 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         setSelectedPointIndex(null);
     };
 
+    /**
+     * Handles pointer move events.
+     * Processes ongoing drag/resize operations.
+     */
     const handleMove = (e) => {
         const mode = dragRef.current.mode;
         if (mode === 'idle') return;
@@ -355,6 +394,10 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         }
     };
 
+    /**
+     * Handles pointer up events.
+     * Finalizes drag operations and updates global state (undo history).
+     */
     const handleUp = () => {
         setMarquee(null);
         setCursorMode('idle');
@@ -376,6 +419,11 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         dragRef.current = { mode: 'idle' };
     };
 
+    /**
+     * Deletes a shape at the specified index.
+     * Updates asset bounds and clears selection.
+     * @param {number} index - Index of the shape to delete.
+     */
     const handleDeleteShape = (index) => {
         if (!confirm('このシェイプを削除しますか？')) return;
         const newEntities = localAsset.entities.filter((_, i) => i !== index);
@@ -393,6 +441,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         localAssetRef.current = updated;
         setLocalAssets(prev => prev.map(a => a.id === designTargetId ? updated : a));
         setSelectedShapeIndices([]);
+        setSelectedPointIndex(null);
     };
 
     const entities = (localAsset && localAsset.entities && localAsset.entities.length > 0)
