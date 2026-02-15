@@ -369,6 +369,8 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
                     finalAsset = { ...finalAsset, ...bounds };
                 }
             }
+            setLocalAsset(finalAsset);
+            localAssetRef.current = finalAsset;
             setLocalAssets(prev => prev.map(a => a.id === designTargetId ? finalAsset : a));
         }
         dragRef.current = { mode: 'idle' };
