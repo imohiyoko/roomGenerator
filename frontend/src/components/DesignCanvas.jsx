@@ -250,6 +250,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
     const updateLocalEntities = (newEntities) => {
         const updated = { ...localAsset, entities: newEntities, isDefaultShape: false };
         setLocalAsset(updated);
+        localAssetRef.current = updated;
     };
 
     const handleDown = (e, shapeIndex = null, pointIndex = null, resizeMode = null, handleIndex = null) => {
@@ -376,8 +377,18 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
     const handleDeleteShape = (index) => {
         if (!confirm('このシェイプを削除しますか？')) return;
         const newEntities = localAsset.entities.filter((_, i) => i !== index);
-        const updated = { ...localAsset, entities: newEntities, isDefaultShape: false };
+
+        // Calculate new bounds after deletion
+        const bounds = calculateAssetBounds(newEntities);
+        const updated = {
+            ...localAsset,
+            entities: newEntities,
+            isDefaultShape: false,
+            ...(bounds || {})
+        };
+
         setLocalAsset(updated);
+        localAssetRef.current = updated;
         setLocalAssets(prev => prev.map(a => a.id === designTargetId ? updated : a));
         setSelectedShapeIndices([]);
     };
