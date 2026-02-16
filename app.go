@@ -127,14 +127,27 @@ func (a *App) GetAssets() (interface{}, error) {
 		return getDefaultGlobalAssets(), nil
 	}
 
-	// まず []map[string]interface{} として読み込む (構造体で読み込むと shapes フィールドが無視されるため)
+	// 1. まず構造体への直接変換を試みる（新フォーマットならロスレス）
+	var assets []Asset
+	if err := json.Unmarshal(data, &assets); err == nil {
+		// レガシー "shapes" キーの場合、Entities が空になるためチェック
+		needsMigration := false
+		for _, a := range assets {
+			if len(a.Entities) == 0 {
+				needsMigration = true
+				break
+			}
+		}
+		if !needsMigration {
+			return assets, nil
+		}
+	}
+
+	// 2. レガシーデータ: マップ経由でマイグレーション（shapes → entities 変換）
 	var rawAssets []map[string]interface{}
 	if err := json.Unmarshal(data, &rawAssets); err != nil {
 		return nil, err
 	}
-
-	// マイグレーションロジックを適用して []Asset に変換
-	// migrateAssets は shapes/entities の両方に対応している
 	return migrateAssets(rawAssets), nil
 }
 
@@ -302,8 +315,25 @@ func normalizeProjectData(p ProjectData, rawData []byte) ProjectData {
 	// LocalAssets を確認
 	if rawAssets, ok := rawMap["assets"].([]interface{}); ok {
 		// 構造体のUnmarshalがEntitiesを埋めるのに失敗した場合（例："shapes"キーのため）、再処理を行う
-		if len(p.LocalAssets) != len(rawAssets) || (len(p.LocalAssets) > 0 && len(p.LocalAssets[0].Entities) == 0) {
+		// 全アセットをチェック（一部だけレガシーの場合にも対応）
+		needsMigration := len(p.LocalAssets) != len(rawAssets)
+		if !needsMigration {
+			for _, a := range p.LocalAssets {
+				if len(a.Entities) == 0 {
+					needsMigration = true
+					break
+				}
+			}
+		}
+		if needsMigration {
 			p.LocalAssets = migrateAssets(convertToMapList(rawAssets))
+		} else {
+			rawList := convertToMapList(rawAssets)
+			for i, a := range p.LocalAssets {
+				if len(a.Entities) == 0 && i < len(rawList) {
+					p.LocalAssets[i] = mapAsset(rawList[i])
+				}
+			}
 		}
 	}
 
@@ -342,6 +372,10 @@ func mapAsset(m map[string]interface{}) Asset {
 		IsDefaultShape: getBool(m, "isDefaultShape"),
 		Snap:           getBool(m, "snap"),
 	}
+
+	// boundX/boundY を保持
+	if v, ok := m["boundX"]; ok { val := getFloatVal(v); a.BoundX = &val }
+	if v, ok := m["boundY"]; ok { val := getFloatVal(v); a.BoundY = &val }
 
 	// Handle entities/shapes
 	var shapes []interface{}
@@ -456,6 +490,14 @@ func mapPoint(m map[string]interface{}) Point {
 	if h2, ok := m["h2"].(map[string]interface{}); ok {
 		p.H2 = Vec2{X: getFloat(h2, "x"), Y: getFloat(h2, "y")}
 	}
+	if handles, ok := m["handles"].([]interface{}); ok {
+		p.Handles = make([]Vec2, len(handles))
+		for i, h := range handles {
+			if hm, ok := h.(map[string]interface{}); ok {
+				p.Handles[i] = Vec2{X: getFloat(hm, "x"), Y: getFloat(hm, "y")}
+			}
+		}
+	}
 	return p
 }
 
@@ -525,6 +567,9 @@ func (a *App) SaveProjectData(id string, data interface{}) error {
 		a.logError("プロジェクト保存失敗(構造体不整合) (ID: %s): %v", id, err)
 		return fmt.Errorf("invalid project data structure: %v", err)
 	}
+
+	// レガシーの "shapes" キーを持つデータをマイグレーション
+	projData = normalizeProjectData(projData, bytes)
 
 	// 検証済みのデータを保存 (元のdataを使うか、構造体を通したデータを使うか)
 	// 構造体を通すことで不正なフィールドを除外できるため、projDataを保存する
