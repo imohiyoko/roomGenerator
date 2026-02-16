@@ -694,7 +694,23 @@ func (a *App) ImportGlobalAssets(jsonData string, mergeMode bool) error {
 			return fmt.Errorf("failed to parse assets: %v", err)
 		}
 		newAssets = migrateAssets(rawMaps)
+	} else {
+		// Check if migration is needed (legacy "shapes" key parsed as empty Entities)
+		needsMigration := false
+		for _, a := range newAssets {
+			if len(a.Entities) == 0 {
+				needsMigration = true
+				break
+			}
+		}
+		if needsMigration {
+			var rawMaps []map[string]interface{}
+			if err := json.Unmarshal([]byte(jsonData), &rawMaps); err == nil {
+				newAssets = migrateAssets(rawMaps)
+			}
+		}
 	}
+
 
 	if !mergeMode {
 		return a.SaveAssets(newAssets)
