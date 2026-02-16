@@ -33,19 +33,10 @@ const Editor = () => {
     const instances = useStore(state => state.instances);
     const setInstances = useStore(state => state.setInstances);
 
-    const selectedIds = useStore(state => state.selectedIds);
-    const setSelectedIds = useStore(state => state.setSelectedIds);
-
     const designTargetId = useStore(state => state.designTargetId);
     const setDesignTargetId = useStore(state => state.setDesignTargetId);
 
-    const selectedShapeIndices = useStore(state => state.selectedShapeIndices);
-    const setSelectedShapeIndices = useStore(state => state.setSelectedShapeIndices);
-    const selectedPointIndex = useStore(state => state.selectedPointIndex);
-    const setSelectedPointIndex = useStore(state => state.setSelectedPointIndex);
-
     const defaultColors = useStore(state => state.defaultColors);
-    const globalAssets = useStore(state => state.globalAssets);
 
     // Actions
     const loadProject = useStore(state => state.loadProject);
@@ -85,7 +76,6 @@ const Editor = () => {
     };
 
     const activeProject = projects.find(p => p.id === currentProjectId);
-    const allAssets = [...localAssets, ...globalAssets];
 
     return (
         <div className="flex h-screen overflow-hidden">
@@ -138,19 +128,9 @@ const Editor = () => {
                 <Ruler viewState={viewState} />
 
                 {mode === 'layout' ? (
-                    <LayoutCanvas
-                        viewState={viewState} setViewState={setViewState}
-                        assets={allAssets}
-                        instances={instances} setInstances={setInstances}
-                        selectedIds={selectedIds} setSelectedIds={setSelectedIds}
-                    />
+                    <LayoutCanvas />
                 ) : (
-                    <DesignCanvas
-                        viewState={viewState} setViewState={setViewState}
-                        assets={allAssets}
-                        designTargetId={designTargetId} setLocalAssets={setLocalAssets}
-                        setGlobalAssets={setGlobalAssets}
-                    />
+                    <DesignCanvas />
                 )}
             </div>
 

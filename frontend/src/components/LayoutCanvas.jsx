@@ -2,6 +2,7 @@ import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT, LAYERS } from '../lib/constants';
 import { toMM, toSvgY, toCartesianY, toSvgRotation } from '../lib/utils';
 import { RenderAssetShapes } from './SharedRender';
+import { useStore } from '../store';
 
 // RenderItem (Pure Component if possible, but we pass props)
 const RenderItem = ({ item, isSelected, onDown }) => {
@@ -19,18 +20,6 @@ const RenderItem = ({ item, isSelected, onDown }) => {
         >
             {item.type === 'text' ? (
                 <g>
-                    {/* Text is rendered normally? */}
-                    {/* Usually text needs scale(1, -1) to not be upside down if we flipped the whole group.
-                        But here we are just positioning the group at flipped Y.
-                        The group itself is not flipped (scale is 1, 1).
-                        So text renders normally.
-                        However, if 'y' coordinate for text baseline is flipped?
-                        RenderItem places <text> at (0,0) (local).
-                        If item.y is the baseline position.
-                        If we want text to appear "upright", we just render text.
-                        Selection box: x=-5, y=-25. This is hardcoded relative to (0,0).
-                        (0,0) is the anchor.
-                    */}
                     {isSelected && <rect x="-5" y="-25" width="100" height="35" fill="rgba(59,130,246,0.1)" stroke="#3b82f6" strokeWidth="2" strokeDasharray="4" />}
                     <text fill={item.color} fontSize={item.fontSize} fontWeight="bold" style={{ whiteSpace: 'pre', userSelect: 'none' }}>{item.text}</text>
                 </g>
@@ -45,22 +34,15 @@ const RenderItem = ({ item, isSelected, onDown }) => {
                         const h = item.h;
 
                         // SVG Bounds (Local)
-                        // bx_svg = bx * SCALE
-                        // by_svg (Bottom) = toSvgY(by) * SCALE
-                        // top_svg = toSvgY(by + h) * SCALE
-
                         const bx_s = bx * BASE_SCALE;
                         const bottom_s = toSvgY(by) * BASE_SCALE;
                         const top_s = toSvgY(by + h) * BASE_SCALE;
                         const w_s = w * BASE_SCALE;
                         const h_s = h * BASE_SCALE; // Distance is positive
 
-                        // Note: top_s is numerically smaller than bottom_s (higher up).
-
                         return (
                             <g className="pointer-events-none">
                                 {/* Coordinates Text: Display Cartesian */}
-                                {/* Place it slightly above the object (SVG Y < top_s) */}
                                 <text x={bx_s - 15} y={top_s - 15} textAnchor="end" fontSize="9" fill="#666" fontWeight="bold">({toMM(item.x)}, {toMM(item.y)})</text>
 
                                 {/* Width Dimension Line (Above top edge) */}
@@ -72,14 +54,11 @@ const RenderItem = ({ item, isSelected, onDown }) => {
                                 <text x={bx_s - 12} y={top_s + h_s / 2} textAnchor="end" dominantBaseline="middle" fontSize="10" fill="blue">{toMM(h)}mm</text>
 
                                 {/* Bounding Box Rect */}
-                                {/* x=bx_s, y=top_s (Top-Left), width=w_s, height=h_s */}
                                 <rect x={bx_s - 2} y={top_s - 2} width={w_s + 4} height={h_s + 4} fill="none" stroke="#3b82f6" strokeWidth="2" strokeDasharray="6 3" />
                             </g>
                         );
                     })()}
                     {/* Name Label: Center of object */}
-                    {/* Center Y (Cartesian) = by + h/2 */}
-                    {/* Center Y (SVG) = toSvgY(by + h/2) */}
                     <text x={(item.boundX || 0) * BASE_SCALE + item.w * BASE_SCALE / 2}
                           y={toSvgY((item.boundY || 0) + item.h / 2) * BASE_SCALE}
                           textAnchor="middle" dominantBaseline="middle" fontSize={12} fill="#333" pointerEvents="none" style={{ userSelect: 'none', textShadow: '0 0 2px white' }}>
@@ -91,7 +70,18 @@ const RenderItem = ({ item, isSelected, onDown }) => {
     );
 };
 
-export const LayoutCanvas = ({ viewState, setViewState, assets, instances, setInstances, selectedIds, setSelectedIds }) => {
+export const LayoutCanvas = () => {
+    const viewState = useStore(state => state.viewState);
+    const setViewState = useStore(state => state.setViewState);
+    const localAssets = useStore(state => state.localAssets);
+    const globalAssets = useStore(state => state.globalAssets);
+    const instances = useStore(state => state.instances);
+    const setInstances = useStore(state => state.setInstances);
+    const selectedIds = useStore(state => state.selectedIds);
+    const setSelectedIds = useStore(state => state.setSelectedIds);
+
+    const assets = [...localAssets, ...globalAssets];
+
     const [localInstances, setLocalInstances] = useState(instances);
     const dragRef = useRef({ isDragging: false, mode: null });
     const svgRef = useRef(null);
