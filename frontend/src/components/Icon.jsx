@@ -27,5 +27,7 @@ export const Icons = {
     Target: <g><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></g>,
     Box: <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />,
     Copy: <g><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></g>,
-    Magnet: <g><path d="M6 15v-5a6 6 0 1 1 12 0v5" strokeWidth="2" /><path d="M6 15h4v4h-4z" fill="currentColor" /><path d="M14 15h4v4h-4z" fill="currentColor" /></g>
+    Magnet: <g><path d="M6 15v-5a6 6 0 1 1 12 0v5" strokeWidth="2" /><path d="M6 15h4v4h-4z" fill="currentColor" /><path d="M14 15h4v4h-4z" fill="currentColor" /></g>,
+    Download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />,
+    Upload: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
 };
