@@ -304,16 +304,15 @@ func normalizeProjectData(p ProjectData, rawData []byte) ProjectData {
 		// 構造体のUnmarshalがEntitiesを埋めるのに失敗した場合（例："shapes"キーのため）、再処理を行う
 		// 全アセットをチェック（一部だけレガシーの場合にも対応）
 		needsMigration := len(p.LocalAssets) != len(rawAssets)
-		if !needsMigration {
-			for _, a := range p.LocalAssets {
-				if len(a.Entities) == 0 {
-					needsMigration = true
-					break
-				}
-			}
-		}
 		if needsMigration {
 			p.LocalAssets = migrateAssets(convertToMapList(rawAssets))
+		} else {
+			rawList := convertToMapList(rawAssets)
+			for i, a := range p.LocalAssets {
+				if len(a.Entities) == 0 && i < len(rawList) {
+					p.LocalAssets[i] = mapAsset(rawList[i])
+				}
+			}
 		}
 	}
 
