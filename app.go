@@ -302,17 +302,8 @@ func normalizeProjectData(p ProjectData, rawData []byte) ProjectData {
 	// LocalAssets を確認
 	if rawAssets, ok := rawMap["assets"].([]interface{}); ok {
 		// 構造体のUnmarshalがEntitiesを埋めるのに失敗した場合（例："shapes"キーのため）、再処理を行う
-		// 全アセットをチェック（一部だけレガシーの場合にも対応）
-		needsMigration := len(p.LocalAssets) != len(rawAssets)
-		if needsMigration {
+		if len(p.LocalAssets) != len(rawAssets) || (len(p.LocalAssets) > 0 && len(p.LocalAssets[0].Entities) == 0) {
 			p.LocalAssets = migrateAssets(convertToMapList(rawAssets))
-		} else {
-			rawList := convertToMapList(rawAssets)
-			for i, a := range p.LocalAssets {
-				if len(a.Entities) == 0 && i < len(rawList) {
-					p.LocalAssets[i] = mapAsset(rawList[i])
-				}
-			}
 		}
 	}
 
@@ -342,19 +333,15 @@ func migrateAssets(legacy []map[string]interface{}) []Asset {
 // 単一のレガシーアセットマップを Asset 構造体にマッピング
 func mapAsset(m map[string]interface{}) Asset {
 	a := Asset{
-		ID:    getString(m, "id"),
-		Name:  getString(m, "name"),
-		Type:  getString(m, "type"),
-		W:     getFloat(m, "w"),
-		H:     getFloat(m, "h"),
-		Color: getString(m, "color"),
+		ID:             getString(m, "id"),
+		Name:           getString(m, "name"),
+		Type:           getString(m, "type"),
+		W:              getFloat(m, "w"),
+		H:              getFloat(m, "h"),
+		Color:          getString(m, "color"),
 		IsDefaultShape: getBool(m, "isDefaultShape"),
 		Snap:           getBool(m, "snap"),
 	}
-
-	// boundX/boundY を保持
-	if v, ok := m["boundX"]; ok { val := getFloatVal(v); a.BoundX = &val }
-	if v, ok := m["boundY"]; ok { val := getFloatVal(v); a.BoundY = &val }
 
 	// Handle entities/shapes
 	var shapes []interface{}
@@ -399,24 +386,60 @@ func mapEntity(m map[string]interface{}) Entity {
 	}
 
 	// Circle/Arc props
-	if v, ok := m["cx"]; ok { val := getFloatVal(v); e.CX = &val }
-	if v, ok := m["cy"]; ok { val := getFloatVal(v); e.CY = &val }
-	if v, ok := m["rx"]; ok { val := getFloatVal(v); e.RX = &val }
-	if v, ok := m["ry"]; ok { val := getFloatVal(v); e.RY = &val }
-	if v, ok := m["rotation"]; ok { val := getFloatVal(v); e.Rotation = &val }
-	if v, ok := m["startAngle"]; ok { val := getFloatVal(v); e.StartAngle = &val }
-	if v, ok := m["endAngle"]; ok { val := getFloatVal(v); e.EndAngle = &val }
+	if v, ok := m["cx"]; ok {
+		val := getFloatVal(v)
+		e.CX = &val
+	}
+	if v, ok := m["cy"]; ok {
+		val := getFloatVal(v)
+		e.CY = &val
+	}
+	if v, ok := m["rx"]; ok {
+		val := getFloatVal(v)
+		e.RX = &val
+	}
+	if v, ok := m["ry"]; ok {
+		val := getFloatVal(v)
+		e.RY = &val
+	}
+	if v, ok := m["rotation"]; ok {
+		val := getFloatVal(v)
+		e.Rotation = &val
+	}
+	if v, ok := m["startAngle"]; ok {
+		val := getFloatVal(v)
+		e.StartAngle = &val
+	}
+	if v, ok := m["endAngle"]; ok {
+		val := getFloatVal(v)
+		e.EndAngle = &val
+	}
 	e.ArcMode = getString(m, "arcMode")
 
 	// Rect/Generic props
-	if v, ok := m["x"]; ok { val := getFloatVal(v); e.X = &val }
-	if v, ok := m["y"]; ok { val := getFloatVal(v); e.Y = &val }
-	if v, ok := m["w"]; ok { val := getFloatVal(v); e.W = &val }
-	if v, ok := m["h"]; ok { val := getFloatVal(v); e.H = &val }
+	if v, ok := m["x"]; ok {
+		val := getFloatVal(v)
+		e.X = &val
+	}
+	if v, ok := m["y"]; ok {
+		val := getFloatVal(v)
+		e.Y = &val
+	}
+	if v, ok := m["w"]; ok {
+		val := getFloatVal(v)
+		e.W = &val
+	}
+	if v, ok := m["h"]; ok {
+		val := getFloatVal(v)
+		e.H = &val
+	}
 
 	// Text
 	e.Text = getString(m, "text")
-	if v, ok := m["fontSize"]; ok { val := getFloatVal(v); e.FontSize = &val }
+	if v, ok := m["fontSize"]; ok {
+		val := getFloatVal(v)
+		e.FontSize = &val
+	}
 
 	return e
 }
@@ -433,16 +456,7 @@ func mapPoint(m map[string]interface{}) Point {
 	if h2, ok := m["h2"].(map[string]interface{}); ok {
 		p.H2 = Vec2{X: getFloat(h2, "x"), Y: getFloat(h2, "y")}
 	}
-	if handles, ok := m["handles"].([]interface{}); ok {
-		p.Handles = make([]Vec2, len(handles))
-		for i, h := range handles {
-			if hm, ok := h.(map[string]interface{}); ok {
-				p.Handles[i] = Vec2{X: getFloat(hm, "x"), Y: getFloat(hm, "y")}
-			}
-		}
-	}
 	return p
-}
 }
 
 func mapInstance(m map[string]interface{}) Instance {
@@ -457,7 +471,10 @@ func mapInstance(m map[string]interface{}) Instance {
 		Text:     getString(m, "text"),
 		Color:    getString(m, "color"),
 	}
-	if v, ok := m["fontSize"]; ok { val := getFloatVal(v); inst.FontSize = &val }
+	if v, ok := m["fontSize"]; ok {
+		val := getFloatVal(v)
+		inst.FontSize = &val
+	}
 	return inst
 }
 
@@ -468,9 +485,11 @@ func getString(m map[string]interface{}, key string) string {
 	}
 	return ""
 }
+
 func getFloat(m map[string]interface{}, key string) float64 {
 	return getFloatVal(m[key])
 }
+
 func getFloatVal(v interface{}) float64 {
 	switch n := v.(type) {
 	case float64:
@@ -482,13 +501,13 @@ func getFloatVal(v interface{}) float64 {
 	}
 	return 0
 }
+
 func getBool(m map[string]interface{}, key string) bool {
 	if v, ok := m[key].(bool); ok {
 		return v
 	}
 	return false
 }
-
 
 // SaveProjectData saves project data
 func (a *App) SaveProjectData(id string, data interface{}) error {
@@ -506,9 +525,6 @@ func (a *App) SaveProjectData(id string, data interface{}) error {
 		a.logError("プロジェクト保存失敗(構造体不整合) (ID: %s): %v", id, err)
 		return fmt.Errorf("invalid project data structure: %v", err)
 	}
-
-	// レガシーの "shapes" キーを持つデータをマイグレーション
-	projData = normalizeProjectData(projData, bytes)
 
 	// 検証済みのデータを保存 (元のdataを使うか、構造体を通したデータを使うか)
 	// 構造体を通すことで不正なフィールドを除外できるため、projDataを保存する
@@ -572,7 +588,6 @@ func (a *App) UpdateProjectName(id string, name string) error {
 	a.logInfo("プロジェクト更新: %s", id)
 	return nil
 }
-
 
 // --- 初期データ生成ロジック ---
 

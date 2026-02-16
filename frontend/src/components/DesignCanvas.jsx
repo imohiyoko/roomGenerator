@@ -43,8 +43,6 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
             case 'draggingRotation': cursorStyle = 'alias'; break;
             case 'resizing': cursorStyle = 'nwse-resize'; break;
             case 'ew-resize': cursorStyle = 'ew-resize'; break;
-            case 'ns-resize': cursorStyle = 'ns-resize'; break;
-            case 'nwse-resize': cursorStyle = 'nwse-resize'; break;
             case 'panning': cursorStyle = 'grabbing'; break;
             default: cursorStyle = 'default'; break;
         }
@@ -352,7 +350,7 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
         }
 
         // Radius Dragging
-        if ((pointIndex === 'rx' || pointIndex === 'ry' || pointIndex === 'rxy') && shapeIndex !== null && currentEntities[shapeIndex]) {
+        if ((pointIndex === 'rx' || pointIndex === 'ry') && shapeIndex !== null && currentEntities[shapeIndex]) {
             dragRef.current = initiateDraggingRadius(e, shapeIndex, pointIndex, localAsset, setSelectedShapeIndices, setCursorMode);
             return;
         }

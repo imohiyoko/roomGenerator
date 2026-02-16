@@ -66,8 +66,6 @@ type Asset struct {
 	Entities       []Entity `json:"entities"`
 	IsDefaultShape bool     `json:"isDefaultShape,omitempty"`
 	Snap           bool     `json:"snap,omitempty"`
-	BoundX         *float64 `json:"boundX,omitempty"`
-	BoundY         *float64 `json:"boundY,omitempty"`
 }
 
 // Instance represents an instance of an Asset placed on the canvas.
