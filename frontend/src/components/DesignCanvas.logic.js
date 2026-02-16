@@ -180,13 +180,21 @@ export const initiateDraggingRadius = (e, shapeIndex, pointIndex, currentAsset, 
     e.stopPropagation();
     setSelectedShapeIndices([shapeIndex]);
     const shape = currentAsset.entities[shapeIndex];
-    setCursorMode('ew-resize');
+    const cursor = pointIndex === 'ry' ? 'ns-resize' : pointIndex === 'rxy' ? 'nwse-resize' : 'ew-resize';
+    setCursorMode(cursor);
+
+    const rotation = shape.rotation || 0;
+    const rotRad = rotation * Math.PI / 180;
+
     return {
         mode: 'draggingRadius',
         targetProp: pointIndex,
         sx: e.clientX,
         sy: e.clientY,
-        initialVal: shape[pointIndex] || 50
+        initialRx: shape.rx || 50,
+        initialRy: shape.ry || 50,
+        initialVal: shape[pointIndex] || 50,
+        rotRad
     };
 };
 
@@ -459,12 +467,38 @@ export const processDraggingRotation = (e, dragRefState, currentAsset, selectedS
 export const processDraggingRadius = (e, dragRefState, currentAsset, viewState, selectedShapeIndices) => {
     const scale = viewState.scale * BASE_SCALE;
     const targetIdx = selectedShapeIndices[0];
-    const dx = (e.clientX - dragRefState.sx) / scale;
+    const rawDx = (e.clientX - dragRefState.sx) / scale;
+    const rawDy = -(e.clientY - dragRefState.sy) / scale; // Y反転（スクリーン→デカルト座標）
 
-    let newVal = dragRefState.initialVal + dx;
-    if (!e.shiftKey) newVal = Math.round(newVal / SNAP_UNIT) * SNAP_UNIT;
-    newVal = Math.max(1, newVal);
+    // 回転を考慮してローカル座標系に変換
+    const cos = Math.cos(-dragRefState.rotRad);
+    const sin = Math.sin(-dragRefState.rotRad);
+    const localDx = rawDx * cos - rawDy * sin;
+    const localDy = rawDx * sin + rawDy * cos;
+
     const newEntities = deepClone(currentAsset.entities);
-    newEntities[targetIdx][dragRefState.targetProp] = newVal;
+    const prop = dragRefState.targetProp;
+
+    if (prop === 'rxy') {
+        // コーナーハンドル: rx と ry を同時に変更
+        let newRx = dragRefState.initialRx + localDx;
+        let newRy = dragRefState.initialRy + localDy;
+        if (!e.shiftKey) {
+            newRx = Math.round(newRx / SNAP_UNIT) * SNAP_UNIT;
+            newRy = Math.round(newRy / SNAP_UNIT) * SNAP_UNIT;
+        }
+        newEntities[targetIdx].rx = Math.max(1, newRx);
+        newEntities[targetIdx].ry = Math.max(1, newRy);
+    } else if (prop === 'rx') {
+        // 横半径: ローカルX方向の移動量を使用
+        let newVal = dragRefState.initialVal + localDx;
+        if (!e.shiftKey) newVal = Math.round(newVal / SNAP_UNIT) * SNAP_UNIT;
+        newEntities[targetIdx].rx = Math.max(1, newVal);
+    } else if (prop === 'ry') {
+        // 縦半径: ローカルY方向の移動量を使用
+        let newVal = dragRefState.initialVal + localDy;
+        if (!e.shiftKey) newVal = Math.round(newVal / SNAP_UNIT) * SNAP_UNIT;
+        newEntities[targetIdx].ry = Math.max(1, newVal);
+    }
     return newEntities;
 };
