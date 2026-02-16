@@ -15,16 +15,8 @@ const DATA_DIR_NAME = "data"
 const LOG_FILE = "app.log"
 
 // --- データ構造 ---
-type Project struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	UpdatedAt string `json:"updatedAt"`
-}
-
-type ProjectData struct {
-	LocalAssets []map[string]interface{} `json:"assets"`    // この物件専用のアセット定義
-	Instances   []map[string]interface{} `json:"instances"` // 配置データ
-}
+// 構造体は models.go に定義されています。
+// Project, ProjectData, Asset, Instance, Entity, Point, Vec2
 
 // App struct
 type App struct {
@@ -134,11 +126,19 @@ func (a *App) GetAssets() (interface{}, error) {
 		a.logInfo("global_assets.json が見つかりません。デフォルトデータを返します")
 		return getDefaultGlobalAssets(), nil
 	}
-	var assets interface{}
-	if err := json.Unmarshal(data, &assets); err != nil {
+	// Try to unmarshal into []Asset first
+	var assets []Asset
+	if err := json.Unmarshal(data, &assets); err == nil {
+		return assets, nil
+	}
+
+	// Fallback for legacy format (map[string]interface{})
+	var legacyAssets []map[string]interface{}
+	if err := json.Unmarshal(data, &legacyAssets); err != nil {
 		return nil, err
 	}
-	return assets, nil
+	// Migrate legacy to new struct
+	return migrateAssets(legacyAssets), nil
 }
 
 // SaveAssets saves global assets
@@ -238,8 +238,8 @@ func (a *App) CreateProject(name string) (*Project, error) {
 	// 新規プロジェクトファイル作成
 	projPath := filepath.Join(a.dataDir, fmt.Sprintf("project_%s.json", newProj.ID))
 	initialData := ProjectData{
-		LocalAssets: []map[string]interface{}{},
-		Instances:   []map[string]interface{}{},
+		LocalAssets: []Asset{},
+		Instances:   []Instance{},
 	}
 	if err := a.saveFile(projPath, initialData); err != nil {
 		a.logError("プロジェクトファイル作成失敗: %v", err)
@@ -260,39 +260,239 @@ func (a *App) GetProjectData(id string) (ProjectData, error) {
 	data, err := a.loadJSON(projPath)
 	if err != nil {
 		a.logInfo("プロジェクトファイルが見つかりません: %s", id)
-		return ProjectData{LocalAssets: []map[string]interface{}{}, Instances: []map[string]interface{}{}}, nil
+		return ProjectData{LocalAssets: []Asset{}, Instances: []Instance{}}, nil
 	}
 
-	// 互換性対応: 配列だった場合の処理
+	// 1. Try to unmarshal into new struct
+	var projData ProjectData
+	if err := json.Unmarshal(data, &projData); err == nil {
+		// Even if unmarshal succeeds, 'Entities' might be empty if input JSON used 'Shapes'
+		// We need to check if legacy migration is needed despite successful unmarshal
+		// Or we can try to unmarshal to map first to be safe.
+		// However, standard json.Unmarshal ignores unknown fields.
+		// So if we have legacy data with "shapes", projData.Entities will be empty.
+		// We should check if we have data.
+		return normalizeProjectData(projData, data), nil
+	}
+
+	// 2. Compatibility: Handle array format (very old legacy)
 	var raw interface{}
 	json.Unmarshal(data, &raw)
 	if list, ok := raw.([]interface{}); ok {
-		instances := make([]map[string]interface{}, len(list))
+		instances := make([]Instance, len(list))
 		for i, v := range list {
 			if m, ok := v.(map[string]interface{}); ok {
-				instances[i] = m
+				instances[i] = mapInstance(m)
 			}
 		}
 		return ProjectData{
-			LocalAssets: []map[string]interface{}{},
+			LocalAssets: []Asset{},
 			Instances:   instances,
 		}, nil
 	}
 
-	var projData ProjectData
-	if err := json.Unmarshal(data, &projData); err != nil {
-		return ProjectData{}, err
-	}
-	return projData, nil
+	return ProjectData{}, fmt.Errorf("failed to parse project data")
 }
+
+// normalizeProjectData ensures that data loaded from JSON (which might be partial legacy) is fully populated
+func normalizeProjectData(p ProjectData, rawData []byte) ProjectData {
+	// If Entities are present, we assume it's new format or already normalized.
+	// But we need to handle the case where "shapes" exists but "entities" does not.
+	// Since json.Unmarshal(struct) skips unknown fields, we might need to inspect raw json or use a map intermediate.
+
+	// Let's decode into a map to check for legacy fields
+	var rawMap map[string]interface{}
+	json.Unmarshal(rawData, &rawMap)
+
+	// Check LocalAssets
+	if rawAssets, ok := rawMap["assets"].([]interface{}); ok {
+		// If the struct unmarshal failed to populate entities (e.g. because of "shapes" key), re-do it
+		if len(p.LocalAssets) != len(rawAssets) || (len(p.LocalAssets) > 0 && len(p.LocalAssets[0].Entities) == 0) {
+			p.LocalAssets = migrateAssets(convertToMapList(rawAssets))
+		}
+	}
+
+	return p
+}
+
+// Helper to convert []interface{} to []map[string]interface{}
+func convertToMapList(list []interface{}) []map[string]interface{} {
+	res := make([]map[string]interface{}, len(list))
+	for i, v := range list {
+		if m, ok := v.(map[string]interface{}); ok {
+			res[i] = m
+		}
+	}
+	return res
+}
+
+// Migration logic: Convert legacy map-based assets to []Asset
+func migrateAssets(legacy []map[string]interface{}) []Asset {
+	res := make([]Asset, len(legacy))
+	for i, m := range legacy {
+		res[i] = mapAsset(m)
+	}
+	return res
+}
+
+// Map single legacy asset map to Asset struct
+func mapAsset(m map[string]interface{}) Asset {
+	a := Asset{
+		ID:    getString(m, "id"),
+		Name:  getString(m, "name"),
+		Type:  getString(m, "type"),
+		W:     getFloat(m, "w"),
+		H:     getFloat(m, "h"),
+		Color: getString(m, "color"),
+		IsDefaultShape: getBool(m, "isDefaultShape"),
+		Snap:           getBool(m, "snap"),
+	}
+
+	// Handle entities/shapes
+	var shapes []interface{}
+	if entities, ok := m["entities"].([]interface{}); ok {
+		shapes = entities
+	} else if s, ok := m["shapes"].([]interface{}); ok {
+		shapes = s
+	}
+
+	if shapes != nil {
+		a.Entities = make([]Entity, len(shapes))
+		for j, s := range shapes {
+			if sm, ok := s.(map[string]interface{}); ok {
+				a.Entities[j] = mapEntity(sm)
+			}
+		}
+	} else {
+		a.Entities = []Entity{}
+	}
+	return a
+}
+
+// Map single legacy entity map to Entity struct
+func mapEntity(m map[string]interface{}) Entity {
+	e := Entity{
+		Type:  getString(m, "type"),
+		Layer: getString(m, "layer"),
+		Color: getString(m, "color"),
+	}
+	if e.Layer == "" {
+		e.Layer = "default"
+	}
+
+	// Points
+	if pts, ok := m["points"].([]interface{}); ok {
+		e.Points = make([]Point, len(pts))
+		for k, p := range pts {
+			if pm, ok := p.(map[string]interface{}); ok {
+				e.Points[k] = mapPoint(pm)
+			}
+		}
+	}
+
+	// Circle/Arc props
+	if v, ok := m["cx"]; ok { val := getFloatVal(v); e.CX = &val }
+	if v, ok := m["cy"]; ok { val := getFloatVal(v); e.CY = &val }
+	if v, ok := m["rx"]; ok { val := getFloatVal(v); e.RX = &val }
+	if v, ok := m["ry"]; ok { val := getFloatVal(v); e.RY = &val }
+	if v, ok := m["rotation"]; ok { val := getFloatVal(v); e.Rotation = &val }
+	if v, ok := m["startAngle"]; ok { val := getFloatVal(v); e.StartAngle = &val }
+	if v, ok := m["endAngle"]; ok { val := getFloatVal(v); e.EndAngle = &val }
+	e.ArcMode = getString(m, "arcMode")
+
+	// Rect/Generic props
+	if v, ok := m["x"]; ok { val := getFloatVal(v); e.X = &val }
+	if v, ok := m["y"]; ok { val := getFloatVal(v); e.Y = &val }
+	if v, ok := m["w"]; ok { val := getFloatVal(v); e.W = &val }
+	if v, ok := m["h"]; ok { val := getFloatVal(v); e.H = &val }
+
+	// Text
+	e.Text = getString(m, "text")
+	if v, ok := m["fontSize"]; ok { val := getFloatVal(v); e.FontSize = &val }
+
+	return e
+}
+
+func mapPoint(m map[string]interface{}) Point {
+	p := Point{
+		X:       getFloat(m, "x"),
+		Y:       getFloat(m, "y"),
+		IsCurve: getBool(m, "isCurve"),
+	}
+	if h1, ok := m["h1"].(map[string]interface{}); ok {
+		p.H1 = Vec2{X: getFloat(h1, "x"), Y: getFloat(h1, "y")}
+	}
+	if h2, ok := m["h2"].(map[string]interface{}); ok {
+		p.H2 = Vec2{X: getFloat(h2, "x"), Y: getFloat(h2, "y")}
+	}
+	return p
+}
+
+func mapInstance(m map[string]interface{}) Instance {
+	inst := Instance{
+		ID:       getString(m, "id"),
+		AssetID:  getString(m, "assetId"),
+		Type:     getString(m, "type"),
+		X:        getFloat(m, "x"),
+		Y:        getFloat(m, "y"),
+		Rotation: getFloat(m, "rotation"),
+		Locked:   getBool(m, "locked"),
+		Text:     getString(m, "text"),
+		Color:    getString(m, "color"),
+	}
+	if v, ok := m["fontSize"]; ok { val := getFloatVal(v); inst.FontSize = &val }
+	return inst
+}
+
+// Type conversion helpers
+func getString(m map[string]interface{}, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+func getFloat(m map[string]interface{}, key string) float64 {
+	return getFloatVal(m[key])
+}
+func getFloatVal(v interface{}) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case int:
+		return float64(n)
+	case float32:
+		return float64(n)
+	}
+	return 0
+}
+func getBool(m map[string]interface{}, key string) bool {
+	if v, ok := m[key].(bool); ok {
+		return v
+	}
+	return false
+}
+
 
 // SaveProjectData saves project data
 func (a *App) SaveProjectData(id string, data interface{}) error {
 	projPath := filepath.Join(a.dataDir, fmt.Sprintf("project_%s.json", id))
-	// io.ReadAll(r.Body) の代わりに data interface{} を受け取るのでそのまま保存
-	// 実際には ProjectData 構造体か map[string]interface{} が渡ってくる想定
 
-	if err := a.saveFile(projPath, data); err != nil {
+	// データ検証: 受け取ったデータをJSON化してProjectData構造体にマッピングできるか確認
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		a.logError("プロジェクト保存失敗(JSON化エラー) (ID: %s): %v", id, err)
+		return err
+	}
+
+	var projData ProjectData
+	if err := json.Unmarshal(bytes, &projData); err != nil {
+		a.logError("プロジェクト保存失敗(構造体不整合) (ID: %s): %v", id, err)
+		return fmt.Errorf("invalid project data structure: %v", err)
+	}
+
+	// 検証済みのデータを保存 (元のdataを使うか、構造体を通したデータを使うか)
+	// 構造体を通すことで不正なフィールドを除外できるため、projDataを保存する
+	if err := a.saveFile(projPath, projData); err != nil {
 		a.logError("プロジェクト保存失敗 (ID: %s): %v", id, err)
 		return err
 	}
@@ -356,34 +556,40 @@ func (a *App) UpdateProjectName(id string, name string) error {
 
 // --- 初期データ生成ロジック ---
 
-func getDefaultGlobalAssets() []map[string]interface{} {
+func getDefaultGlobalAssets() []Asset {
 	// ヘルパー：矩形ポイントを生成
-	createRect := func(w, h int) []interface{} {
-		return []interface{}{
-			map[string]interface{}{"x": 0, "y": 0, "h1": map[string]int{"x": 0, "y": 0}, "h2": map[string]int{"x": 0, "y": 0}, "isCurve": false},
-			map[string]interface{}{"x": w, "y": 0, "h1": map[string]int{"x": 0, "y": 0}, "h2": map[string]int{"x": 0, "y": 0}, "isCurve": false},
-			map[string]interface{}{"x": w, "y": h, "h1": map[string]int{"x": 0, "y": 0}, "h2": map[string]int{"x": 0, "y": 0}, "isCurve": false},
-			map[string]interface{}{"x": 0, "y": h, "h1": map[string]int{"x": 0, "y": 0}, "h2": map[string]int{"x": 0, "y": 0}, "isCurve": false},
+	createRect := func(w, h float64) []Point {
+		return []Point{
+			{X: 0, Y: 0, H1: Vec2{0, 0}, H2: Vec2{0, 0}, IsCurve: false},
+			{X: w, Y: 0, H1: Vec2{0, 0}, H2: Vec2{0, 0}, IsCurve: false},
+			{X: w, Y: h, H1: Vec2{0, 0}, H2: Vec2{0, 0}, IsCurve: false},
+			{X: 0, Y: h, H1: Vec2{0, 0}, H2: Vec2{0, 0}, IsCurve: false},
 		}
 	}
 
 	// ヘルパー：多角形アセットを生成（wとhは頂点座標から決定）
-	createPolygonAsset := func(id, name, typ string, w, h int, color string, snap bool) map[string]interface{} {
-		return map[string]interface{}{
-			"id": id, "name": name, "type": typ, "w": w, "h": h, "color": color, "snap": snap,
-			"isDefaultShape": true, // デフォルト形状としてマーク
-			"entities": []interface{}{
-				map[string]interface{}{
-					"type":   "polygon",
-					"points": createRect(w, h),
-					"color":  color,
-					"layer":  "default",
+	createPolygonAsset := func(id, name, typ string, w, h float64, color string, snap bool) Asset {
+		return Asset{
+			ID:             id,
+			Name:           name,
+			Type:           typ,
+			W:              w,
+			H:              h,
+			Color:          color,
+			Snap:           snap,
+			IsDefaultShape: true,
+			Entities: []Entity{
+				{
+					Type:   "polygon",
+					Points: createRect(w, h),
+					Color:  color,
+					Layer:  "default",
 				},
 			},
 		}
 	}
 
-	assets := []map[string]interface{}{
+	assets := []Asset{
 		// --- 部屋 ---
 		createPolygonAsset("a_room6", "洋室 (6畳)", "room", 360, 270, "#fdfcdc", true),
 		createPolygonAsset("a_ldk10", "LDK (10畳)", "room", 360, 450, "#fffbf0", true),
