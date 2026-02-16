@@ -15,16 +15,8 @@ const DATA_DIR_NAME = "data"
 const LOG_FILE = "app.log"
 
 // --- データ構造 ---
-type Project struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	UpdatedAt string `json:"updatedAt"`
-}
-
-type ProjectData struct {
-	LocalAssets []map[string]interface{} `json:"assets"`    // この物件専用のアセット定義
-	Instances   []map[string]interface{} `json:"instances"` // 配置データ
-}
+// 構造体は models.go に定義されています。
+// Project, ProjectData, Asset, Instance, Entity, Point, Vec2
 
 // App struct
 type App struct {
@@ -134,11 +126,29 @@ func (a *App) GetAssets() (interface{}, error) {
 		a.logInfo("global_assets.json が見つかりません。デフォルトデータを返します")
 		return getDefaultGlobalAssets(), nil
 	}
-	var assets interface{}
-	if err := json.Unmarshal(data, &assets); err != nil {
+
+	// 1. まず構造体への直接変換を試みる（新フォーマットならロスレス）
+	var assets []Asset
+	if err := json.Unmarshal(data, &assets); err == nil {
+		// レガシー "shapes" キーの場合、Entities が空になるためチェック
+		needsMigration := false
+		for _, a := range assets {
+			if len(a.Entities) == 0 {
+				needsMigration = true
+				break
+			}
+		}
+		if !needsMigration {
+			return assets, nil
+		}
+	}
+
+	// 2. レガシーデータ: マップ経由でマイグレーション（shapes → entities 変換）
+	var rawAssets []map[string]interface{}
+	if err := json.Unmarshal(data, &rawAssets); err != nil {
 		return nil, err
 	}
-	return assets, nil
+	return migrateAssets(rawAssets), nil
 }
 
 // SaveAssets saves global assets
@@ -238,8 +248,8 @@ func (a *App) CreateProject(name string) (*Project, error) {
 	// 新規プロジェクトファイル作成
 	projPath := filepath.Join(a.dataDir, fmt.Sprintf("project_%s.json", newProj.ID))
 	initialData := ProjectData{
-		LocalAssets: []map[string]interface{}{},
-		Instances:   []map[string]interface{}{},
+		LocalAssets: []Asset{},
+		Instances:   []Instance{},
 	}
 	if err := a.saveFile(projPath, initialData); err != nil {
 		a.logError("プロジェクトファイル作成失敗: %v", err)
@@ -260,39 +270,310 @@ func (a *App) GetProjectData(id string) (ProjectData, error) {
 	data, err := a.loadJSON(projPath)
 	if err != nil {
 		a.logInfo("プロジェクトファイルが見つかりません: %s", id)
-		return ProjectData{LocalAssets: []map[string]interface{}{}, Instances: []map[string]interface{}{}}, nil
+		return ProjectData{LocalAssets: []Asset{}, Instances: []Instance{}}, nil
 	}
 
-	// 互換性対応: 配列だった場合の処理
+	// 1. 新しい構造体への変換を試みる
+	var projData ProjectData
+	if err := json.Unmarshal(data, &projData); err == nil {
+		// アンマーシャルが成功した場合でも、入力JSONが 'shapes' (旧キー) を使用していると
+		// 'Entities' が空になる可能性があるため確認が必要。
+		// json.Unmarshal は不明なフィールドを無視するため、レガシーデータの場合
+		// projData.Entities は空になる。データが存在するか確認する。
+		return normalizeProjectData(projData, data), nil
+	}
+
+	// 2. 互換性対応: 配列形式の場合 (非常に古いレガシーデータ)
 	var raw interface{}
 	json.Unmarshal(data, &raw)
 	if list, ok := raw.([]interface{}); ok {
-		instances := make([]map[string]interface{}, len(list))
+		instances := make([]Instance, len(list))
 		for i, v := range list {
 			if m, ok := v.(map[string]interface{}); ok {
-				instances[i] = m
+				instances[i] = mapInstance(m)
 			}
 		}
 		return ProjectData{
-			LocalAssets: []map[string]interface{}{},
+			LocalAssets: []Asset{},
 			Instances:   instances,
 		}, nil
 	}
 
-	var projData ProjectData
-	if err := json.Unmarshal(data, &projData); err != nil {
-		return ProjectData{}, err
+	return ProjectData{}, fmt.Errorf("failed to parse project data")
+}
+
+// normalizeProjectData は読み込まれたJSONが部分的にレガシーであってもデータを完全に構築します
+func normalizeProjectData(p ProjectData, rawData []byte) ProjectData {
+	// Entitiesが存在すれば、新しいフォーマットか既に正規化済みとみなす。
+	// しかし "shapes" キーが存在するが "entities" が存在しない場合を処理する必要がある。
+	// json.Unmarshal(struct) は不明なフィールドをスキップするため、生のJSONを検査するかマップを使用する。
+
+	// レガシーフィールドを確認するためにマップにデコード
+	var rawMap map[string]interface{}
+	json.Unmarshal(rawData, &rawMap)
+
+	// LocalAssets を確認
+	if rawAssets, ok := rawMap["assets"].([]interface{}); ok {
+		// 構造体のUnmarshalがEntitiesを埋めるのに失敗した場合（例："shapes"キーのため）、再処理を行う
+		// 全アセットをチェック（一部だけレガシーの場合にも対応）
+		needsMigration := len(p.LocalAssets) != len(rawAssets)
+		if !needsMigration {
+			for _, a := range p.LocalAssets {
+				if len(a.Entities) == 0 {
+					needsMigration = true
+					break
+				}
+			}
+		}
+		if needsMigration {
+			p.LocalAssets = migrateAssets(convertToMapList(rawAssets))
+		} else {
+			rawList := convertToMapList(rawAssets)
+			for i, a := range p.LocalAssets {
+				if len(a.Entities) == 0 && i < len(rawList) {
+					p.LocalAssets[i] = mapAsset(rawList[i])
+				}
+			}
+		}
 	}
-	return projData, nil
+
+	return p
+}
+
+// []interface{} を []map[string]interface{} に変換するヘルパー
+func convertToMapList(list []interface{}) []map[string]interface{} {
+	res := make([]map[string]interface{}, len(list))
+	for i, v := range list {
+		if m, ok := v.(map[string]interface{}); ok {
+			res[i] = m
+		}
+	}
+	return res
+}
+
+// マイグレーションロジック: レガシーなマップベースのアセットを []Asset に変換
+func migrateAssets(legacy []map[string]interface{}) []Asset {
+	res := make([]Asset, len(legacy))
+	for i, m := range legacy {
+		res[i] = mapAsset(m)
+	}
+	return res
+}
+
+// 単一のレガシーアセットマップを Asset 構造体にマッピング
+func mapAsset(m map[string]interface{}) Asset {
+	a := Asset{
+		ID:             getString(m, "id"),
+		Name:           getString(m, "name"),
+		Type:           getString(m, "type"),
+		W:              getFloat(m, "w"),
+		H:              getFloat(m, "h"),
+		Color:          getString(m, "color"),
+		IsDefaultShape: getBool(m, "isDefaultShape"),
+		Snap:           getBool(m, "snap"),
+	}
+
+	// boundX/boundY を保持
+	if v, ok := m["boundX"]; ok { val := getFloatVal(v); a.BoundX = &val }
+	if v, ok := m["boundY"]; ok { val := getFloatVal(v); a.BoundY = &val }
+
+	// Handle entities/shapes
+	var shapes []interface{}
+	if entities, ok := m["entities"].([]interface{}); ok {
+		shapes = entities
+	} else if s, ok := m["shapes"].([]interface{}); ok {
+		shapes = s
+	}
+
+	if shapes != nil {
+		a.Entities = make([]Entity, len(shapes))
+		for j, s := range shapes {
+			if sm, ok := s.(map[string]interface{}); ok {
+				a.Entities[j] = mapEntity(sm)
+			}
+		}
+	} else {
+		a.Entities = []Entity{}
+	}
+	return a
+}
+
+// 単一のレガシーエンティティマップを Entity 構造体にマッピング
+func mapEntity(m map[string]interface{}) Entity {
+	e := Entity{
+		Type:  getString(m, "type"),
+		Layer: getString(m, "layer"),
+		Color: getString(m, "color"),
+	}
+	if e.Layer == "" {
+		e.Layer = "default"
+	}
+
+	// Points
+	if pts, ok := m["points"].([]interface{}); ok {
+		e.Points = make([]Point, len(pts))
+		for k, p := range pts {
+			if pm, ok := p.(map[string]interface{}); ok {
+				e.Points[k] = mapPoint(pm)
+			}
+		}
+	}
+
+	// Circle/Arc props
+	if v, ok := m["cx"]; ok {
+		val := getFloatVal(v)
+		e.CX = &val
+	}
+	if v, ok := m["cy"]; ok {
+		val := getFloatVal(v)
+		e.CY = &val
+	}
+	if v, ok := m["rx"]; ok {
+		val := getFloatVal(v)
+		e.RX = &val
+	}
+	if v, ok := m["ry"]; ok {
+		val := getFloatVal(v)
+		e.RY = &val
+	}
+	if v, ok := m["rotation"]; ok {
+		val := getFloatVal(v)
+		e.Rotation = &val
+	}
+	if v, ok := m["startAngle"]; ok {
+		val := getFloatVal(v)
+		e.StartAngle = &val
+	}
+	if v, ok := m["endAngle"]; ok {
+		val := getFloatVal(v)
+		e.EndAngle = &val
+	}
+	e.ArcMode = getString(m, "arcMode")
+
+	// Rect/Generic props
+	if v, ok := m["x"]; ok {
+		val := getFloatVal(v)
+		e.X = &val
+	}
+	if v, ok := m["y"]; ok {
+		val := getFloatVal(v)
+		e.Y = &val
+	}
+	if v, ok := m["w"]; ok {
+		val := getFloatVal(v)
+		e.W = &val
+	}
+	if v, ok := m["h"]; ok {
+		val := getFloatVal(v)
+		e.H = &val
+	}
+
+	// Text
+	e.Text = getString(m, "text")
+	if v, ok := m["fontSize"]; ok {
+		val := getFloatVal(v)
+		e.FontSize = &val
+	}
+
+	return e
+}
+
+func mapPoint(m map[string]interface{}) Point {
+	p := Point{
+		X:       getFloat(m, "x"),
+		Y:       getFloat(m, "y"),
+		IsCurve: getBool(m, "isCurve"),
+	}
+	if h1, ok := m["h1"].(map[string]interface{}); ok {
+		p.H1 = Vec2{X: getFloat(h1, "x"), Y: getFloat(h1, "y")}
+	}
+	if h2, ok := m["h2"].(map[string]interface{}); ok {
+		p.H2 = Vec2{X: getFloat(h2, "x"), Y: getFloat(h2, "y")}
+	}
+	if handles, ok := m["handles"].([]interface{}); ok {
+		p.Handles = make([]Vec2, len(handles))
+		for i, h := range handles {
+			if hm, ok := h.(map[string]interface{}); ok {
+				p.Handles[i] = Vec2{X: getFloat(hm, "x"), Y: getFloat(hm, "y")}
+			}
+		}
+	}
+	return p
+}
+
+func mapInstance(m map[string]interface{}) Instance {
+	inst := Instance{
+		ID:       getString(m, "id"),
+		AssetID:  getString(m, "assetId"),
+		Type:     getString(m, "type"),
+		X:        getFloat(m, "x"),
+		Y:        getFloat(m, "y"),
+		Rotation: getFloat(m, "rotation"),
+		Locked:   getBool(m, "locked"),
+		Text:     getString(m, "text"),
+		Color:    getString(m, "color"),
+	}
+	if v, ok := m["fontSize"]; ok {
+		val := getFloatVal(v)
+		inst.FontSize = &val
+	}
+	return inst
+}
+
+// Type conversion helpers
+func getString(m map[string]interface{}, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func getFloat(m map[string]interface{}, key string) float64 {
+	return getFloatVal(m[key])
+}
+
+func getFloatVal(v interface{}) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case int:
+		return float64(n)
+	case float32:
+		return float64(n)
+	}
+	return 0
+}
+
+func getBool(m map[string]interface{}, key string) bool {
+	if v, ok := m[key].(bool); ok {
+		return v
+	}
+	return false
 }
 
 // SaveProjectData saves project data
 func (a *App) SaveProjectData(id string, data interface{}) error {
 	projPath := filepath.Join(a.dataDir, fmt.Sprintf("project_%s.json", id))
-	// io.ReadAll(r.Body) の代わりに data interface{} を受け取るのでそのまま保存
-	// 実際には ProjectData 構造体か map[string]interface{} が渡ってくる想定
 
-	if err := a.saveFile(projPath, data); err != nil {
+	// データ検証: 受け取ったデータをJSON化してProjectData構造体にマッピングできるか確認
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		a.logError("プロジェクト保存失敗(JSON化エラー) (ID: %s): %v", id, err)
+		return err
+	}
+
+	var projData ProjectData
+	if err := json.Unmarshal(bytes, &projData); err != nil {
+		a.logError("プロジェクト保存失敗(構造体不整合) (ID: %s): %v", id, err)
+		return fmt.Errorf("invalid project data structure: %v", err)
+	}
+
+	// レガシーの "shapes" キーを持つデータをマイグレーション
+	projData = normalizeProjectData(projData, bytes)
+
+	// 検証済みのデータを保存 (元のdataを使うか、構造体を通したデータを使うか)
+	// 構造体を通すことで不正なフィールドを除外できるため、projDataを保存する
+	if err := a.saveFile(projPath, projData); err != nil {
 		a.logError("プロジェクト保存失敗 (ID: %s): %v", id, err)
 		return err
 	}
@@ -353,37 +634,42 @@ func (a *App) UpdateProjectName(id string, name string) error {
 	return nil
 }
 
-
 // --- 初期データ生成ロジック ---
 
-func getDefaultGlobalAssets() []map[string]interface{} {
+func getDefaultGlobalAssets() []Asset {
 	// ヘルパー：矩形ポイントを生成
-	createRect := func(w, h int) []interface{} {
-		return []interface{}{
-			map[string]interface{}{"x": 0, "y": 0, "h1": map[string]int{"x": 0, "y": 0}, "h2": map[string]int{"x": 0, "y": 0}, "isCurve": false},
-			map[string]interface{}{"x": w, "y": 0, "h1": map[string]int{"x": 0, "y": 0}, "h2": map[string]int{"x": 0, "y": 0}, "isCurve": false},
-			map[string]interface{}{"x": w, "y": h, "h1": map[string]int{"x": 0, "y": 0}, "h2": map[string]int{"x": 0, "y": 0}, "isCurve": false},
-			map[string]interface{}{"x": 0, "y": h, "h1": map[string]int{"x": 0, "y": 0}, "h2": map[string]int{"x": 0, "y": 0}, "isCurve": false},
+	createRect := func(w, h float64) []Point {
+		return []Point{
+			{X: 0, Y: 0, H1: Vec2{0, 0}, H2: Vec2{0, 0}, IsCurve: false},
+			{X: w, Y: 0, H1: Vec2{0, 0}, H2: Vec2{0, 0}, IsCurve: false},
+			{X: w, Y: h, H1: Vec2{0, 0}, H2: Vec2{0, 0}, IsCurve: false},
+			{X: 0, Y: h, H1: Vec2{0, 0}, H2: Vec2{0, 0}, IsCurve: false},
 		}
 	}
 
 	// ヘルパー：多角形アセットを生成（wとhは頂点座標から決定）
-	createPolygonAsset := func(id, name, typ string, w, h int, color string, snap bool) map[string]interface{} {
-		return map[string]interface{}{
-			"id": id, "name": name, "type": typ, "w": w, "h": h, "color": color, "snap": snap,
-			"isDefaultShape": true, // デフォルト形状としてマーク
-			"entities": []interface{}{
-				map[string]interface{}{
-					"type":   "polygon",
-					"points": createRect(w, h),
-					"color":  color,
-					"layer":  "default",
+	createPolygonAsset := func(id, name, typ string, w, h float64, color string, snap bool) Asset {
+		return Asset{
+			ID:             id,
+			Name:           name,
+			Type:           typ,
+			W:              w,
+			H:              h,
+			Color:          color,
+			Snap:           snap,
+			IsDefaultShape: true,
+			Entities: []Entity{
+				{
+					Type:   "polygon",
+					Points: createRect(w, h),
+					Color:  color,
+					Layer:  "default",
 				},
 			},
 		}
 	}
 
-	assets := []map[string]interface{}{
+	assets := []Asset{
 		// --- 部屋 ---
 		createPolygonAsset("a_room6", "洋室 (6畳)", "room", 360, 270, "#fdfcdc", true),
 		createPolygonAsset("a_ldk10", "LDK (10畳)", "room", 360, 450, "#fffbf0", true),
