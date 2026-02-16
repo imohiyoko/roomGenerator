@@ -468,11 +468,12 @@ export const processDraggingRadius = (e, dragRefState, currentAsset, viewState, 
     const scale = viewState.scale * BASE_SCALE;
     const targetIdx = selectedShapeIndices[0];
     const rawDx = (e.clientX - dragRefState.sx) / scale;
-    const rawDy = -(e.clientY - dragRefState.sy) / scale; // Y反転（スクリーン→デカルト座標）
+    const rawDy = (e.clientY - dragRefState.sy) / scale; // SVG空間と同じY下向き（ハンドルがSVG空間で描画されるため）
 
-    // 回転を考慮してローカル座標系に変換
-    const cos = Math.cos(-dragRefState.rotRad);
-    const sin = Math.sin(-dragRefState.rotRad);
+    // 回転を考慮してローカル座標系に変換（SVG空間での回転 = -デカルト回転）
+    const svgRotRad = -dragRefState.rotRad;
+    const cos = Math.cos(-svgRotRad);
+    const sin = Math.sin(-svgRotRad);
     const localDx = rawDx * cos - rawDy * sin;
     const localDy = rawDx * sin + rawDy * cos;
 
