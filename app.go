@@ -126,19 +126,16 @@ func (a *App) GetAssets() (interface{}, error) {
 		a.logInfo("global_assets.json が見つかりません。デフォルトデータを返します")
 		return getDefaultGlobalAssets(), nil
 	}
-	// Try to unmarshal into []Asset first
-	var assets []Asset
-	if err := json.Unmarshal(data, &assets); err == nil {
-		return assets, nil
-	}
 
-	// Fallback for legacy format (map[string]interface{})
-	var legacyAssets []map[string]interface{}
-	if err := json.Unmarshal(data, &legacyAssets); err != nil {
+	// まず []map[string]interface{} として読み込む (構造体で読み込むと shapes フィールドが無視されるため)
+	var rawAssets []map[string]interface{}
+	if err := json.Unmarshal(data, &rawAssets); err != nil {
 		return nil, err
 	}
-	// Migrate legacy to new struct
-	return migrateAssets(legacyAssets), nil
+
+	// マイグレーションロジックを適用して []Asset に変換
+	// migrateAssets は shapes/entities の両方に対応している
+	return migrateAssets(rawAssets), nil
 }
 
 // SaveAssets saves global assets
@@ -263,19 +260,17 @@ func (a *App) GetProjectData(id string) (ProjectData, error) {
 		return ProjectData{LocalAssets: []Asset{}, Instances: []Instance{}}, nil
 	}
 
-	// 1. Try to unmarshal into new struct
+	// 1. 新しい構造体への変換を試みる
 	var projData ProjectData
 	if err := json.Unmarshal(data, &projData); err == nil {
-		// Even if unmarshal succeeds, 'Entities' might be empty if input JSON used 'Shapes'
-		// We need to check if legacy migration is needed despite successful unmarshal
-		// Or we can try to unmarshal to map first to be safe.
-		// However, standard json.Unmarshal ignores unknown fields.
-		// So if we have legacy data with "shapes", projData.Entities will be empty.
-		// We should check if we have data.
+		// アンマーシャルが成功した場合でも、入力JSONが 'shapes' (旧キー) を使用していると
+		// 'Entities' が空になる可能性があるため確認が必要。
+		// json.Unmarshal は不明なフィールドを無視するため、レガシーデータの場合
+		// projData.Entities は空になる。データが存在するか確認する。
 		return normalizeProjectData(projData, data), nil
 	}
 
-	// 2. Compatibility: Handle array format (very old legacy)
+	// 2. 互換性対応: 配列形式の場合 (非常に古いレガシーデータ)
 	var raw interface{}
 	json.Unmarshal(data, &raw)
 	if list, ok := raw.([]interface{}); ok {
@@ -294,19 +289,19 @@ func (a *App) GetProjectData(id string) (ProjectData, error) {
 	return ProjectData{}, fmt.Errorf("failed to parse project data")
 }
 
-// normalizeProjectData ensures that data loaded from JSON (which might be partial legacy) is fully populated
+// normalizeProjectData は読み込まれたJSONが部分的にレガシーであってもデータを完全に構築します
 func normalizeProjectData(p ProjectData, rawData []byte) ProjectData {
-	// If Entities are present, we assume it's new format or already normalized.
-	// But we need to handle the case where "shapes" exists but "entities" does not.
-	// Since json.Unmarshal(struct) skips unknown fields, we might need to inspect raw json or use a map intermediate.
+	// Entitiesが存在すれば、新しいフォーマットか既に正規化済みとみなす。
+	// しかし "shapes" キーが存在するが "entities" が存在しない場合を処理する必要がある。
+	// json.Unmarshal(struct) は不明なフィールドをスキップするため、生のJSONを検査するかマップを使用する。
 
-	// Let's decode into a map to check for legacy fields
+	// レガシーフィールドを確認するためにマップにデコード
 	var rawMap map[string]interface{}
 	json.Unmarshal(rawData, &rawMap)
 
-	// Check LocalAssets
+	// LocalAssets を確認
 	if rawAssets, ok := rawMap["assets"].([]interface{}); ok {
-		// If the struct unmarshal failed to populate entities (e.g. because of "shapes" key), re-do it
+		// 構造体のUnmarshalがEntitiesを埋めるのに失敗した場合（例："shapes"キーのため）、再処理を行う
 		if len(p.LocalAssets) != len(rawAssets) || (len(p.LocalAssets) > 0 && len(p.LocalAssets[0].Entities) == 0) {
 			p.LocalAssets = migrateAssets(convertToMapList(rawAssets))
 		}
@@ -315,7 +310,7 @@ func normalizeProjectData(p ProjectData, rawData []byte) ProjectData {
 	return p
 }
 
-// Helper to convert []interface{} to []map[string]interface{}
+// []interface{} を []map[string]interface{} に変換するヘルパー
 func convertToMapList(list []interface{}) []map[string]interface{} {
 	res := make([]map[string]interface{}, len(list))
 	for i, v := range list {
@@ -326,7 +321,7 @@ func convertToMapList(list []interface{}) []map[string]interface{} {
 	return res
 }
 
-// Migration logic: Convert legacy map-based assets to []Asset
+// マイグレーションロジック: レガシーなマップベースのアセットを []Asset に変換
 func migrateAssets(legacy []map[string]interface{}) []Asset {
 	res := make([]Asset, len(legacy))
 	for i, m := range legacy {
@@ -335,7 +330,7 @@ func migrateAssets(legacy []map[string]interface{}) []Asset {
 	return res
 }
 
-// Map single legacy asset map to Asset struct
+// 単一のレガシーアセットマップを Asset 構造体にマッピング
 func mapAsset(m map[string]interface{}) Asset {
 	a := Asset{
 		ID:    getString(m, "id"),
@@ -369,7 +364,7 @@ func mapAsset(m map[string]interface{}) Asset {
 	return a
 }
 
-// Map single legacy entity map to Entity struct
+// 単一のレガシーエンティティマップを Entity 構造体にマッピング
 func mapEntity(m map[string]interface{}) Entity {
 	e := Entity{
 		Type:  getString(m, "type"),
