@@ -434,7 +434,16 @@ func mapPoint(m map[string]interface{}) Point {
 	if h2, ok := m["h2"].(map[string]interface{}); ok {
 		p.H2 = Vec2{X: getFloat(h2, "x"), Y: getFloat(h2, "y")}
 	}
+	if handles, ok := m["handles"].([]interface{}); ok {
+		p.Handles = make([]Vec2, len(handles))
+		for i, h := range handles {
+			if hm, ok := h.(map[string]interface{}); ok {
+				p.Handles[i] = Vec2{X: getFloat(hm, "x"), Y: getFloat(hm, "y")}
+			}
+		}
+	}
 	return p
+}
 }
 
 func mapInstance(m map[string]interface{}) Instance {
