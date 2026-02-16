@@ -481,14 +481,14 @@ export const processDraggingRadius = (e, dragRefState, currentAsset, viewState, 
     const prop = dragRefState.targetProp;
 
     if (prop === 'rxy') {
-        // コーナーハンドル: rx と ry を同時に変更
+        // コーナーハンドル: アスペクト比を維持して等比率拡大縮小
+        // ローカルX方向の移動量を基準にスケール率を計算
+        const ratio = dragRefState.initialRy / dragRefState.initialRx;
         let newRx = dragRefState.initialRx + localDx;
-        let newRy = dragRefState.initialRy + localDy;
-        if (!e.shiftKey) {
-            newRx = Math.round(newRx / SNAP_UNIT) * SNAP_UNIT;
-            newRy = Math.round(newRy / SNAP_UNIT) * SNAP_UNIT;
-        }
-        newEntities[targetIdx].rx = Math.max(1, newRx);
+        if (!e.shiftKey) newRx = Math.round(newRx / SNAP_UNIT) * SNAP_UNIT;
+        newRx = Math.max(1, newRx);
+        let newRy = newRx * ratio;
+        newEntities[targetIdx].rx = newRx;
         newEntities[targetIdx].ry = Math.max(1, newRy);
     } else if (prop === 'rx') {
         // 横半径: ローカルX方向の移動量を使用
