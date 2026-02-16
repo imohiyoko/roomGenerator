@@ -3,6 +3,8 @@ build/bin/
 wails_temp/
 frontend/dist/
 frontend/node_modules/
+# Wailsが自動生成するバインディング（Go構造体変更時に自動再生成される）
+frontend/wailsjs/
 # Wailsが自動生成するチェックサムファイル（頻繁に変更されるため無視推奨）
 frontend/package.json.md5
 
