@@ -304,16 +304,15 @@ func normalizeProjectData(p ProjectData, rawData []byte) ProjectData {
 		// 構造体のUnmarshalがEntitiesを埋めるのに失敗した場合（例："shapes"キーのため）、再処理を行う
 		// 全アセットをチェック（一部だけレガシーの場合にも対応）
 		needsMigration := len(p.LocalAssets) != len(rawAssets)
-		if !needsMigration {
-			for _, a := range p.LocalAssets {
-				if len(a.Entities) == 0 {
-					needsMigration = true
-					break
-				}
-			}
-		}
 		if needsMigration {
 			p.LocalAssets = migrateAssets(convertToMapList(rawAssets))
+		} else {
+			rawList := convertToMapList(rawAssets)
+			for i, a := range p.LocalAssets {
+				if len(a.Entities) == 0 && i < len(rawList) {
+					p.LocalAssets[i] = mapAsset(rawList[i])
+				}
+			}
 		}
 	}
 
@@ -434,7 +433,16 @@ func mapPoint(m map[string]interface{}) Point {
 	if h2, ok := m["h2"].(map[string]interface{}); ok {
 		p.H2 = Vec2{X: getFloat(h2, "x"), Y: getFloat(h2, "y")}
 	}
+	if handles, ok := m["handles"].([]interface{}); ok {
+		p.Handles = make([]Vec2, len(handles))
+		for i, h := range handles {
+			if hm, ok := h.(map[string]interface{}); ok {
+				p.Handles[i] = Vec2{X: getFloat(hm, "x"), Y: getFloat(hm, "y")}
+			}
+		}
+	}
 	return p
+}
 }
 
 func mapInstance(m map[string]interface{}) Instance {
