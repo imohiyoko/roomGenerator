@@ -481,14 +481,21 @@ export const processDraggingRadius = (e, dragRefState, currentAsset, viewState, 
     const prop = dragRefState.targetProp;
 
     if (prop === 'rxy') {
-        // コーナーハンドル: アスペクト比を維持して等比率拡大縮小
-        // ローカルX方向の移動量を基準にスケール率を計算
-        const ratio = dragRefState.initialRy / dragRefState.initialRx;
-        let newRx = dragRefState.initialRx + localDx;
-        if (!e.shiftKey) newRx = Math.round(newRx / SNAP_UNIT) * SNAP_UNIT;
-        newRx = Math.max(1, newRx);
-        let newRy = newRx * ratio;
-        newEntities[targetIdx].rx = newRx;
+        // コーナーハンドル: 中心→ハンドル方向へのドラッグで等比率拡大縮小
+        // ローカル空間でのハンドル方向ベクトル (initialRx, initialRy) への射影を計算
+        const hx = dragRefState.initialRx;
+        const hy = dragRefState.initialRy;
+        const hLen = Math.sqrt(hx * hx + hy * hy);
+        // ドラッグ移動量をハンドル方向に射影
+        const proj = (localDx * hx + localDy * hy) / hLen;
+        const scale = (hLen + proj) / hLen;
+        let newRx = dragRefState.initialRx * scale;
+        let newRy = dragRefState.initialRy * scale;
+        if (!e.shiftKey) {
+            newRx = Math.round(newRx / SNAP_UNIT) * SNAP_UNIT;
+            newRy = newRx * (dragRefState.initialRy / dragRefState.initialRx);
+        }
+        newEntities[targetIdx].rx = Math.max(1, newRx);
         newEntities[targetIdx].ry = Math.max(1, newRy);
     } else if (prop === 'rx') {
         // 横半径: ローカルX方向の移動量を使用
