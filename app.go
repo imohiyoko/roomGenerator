@@ -634,6 +634,121 @@ func (a *App) UpdateProjectName(id string, name string) error {
 	return nil
 }
 
+// ExportProject exports project data as JSON string
+func (a *App) ExportProject(id string) (string, error) {
+	data, err := a.GetProjectData(id)
+	if err != nil {
+		return "", err
+	}
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), nil
+}
+
+// ImportProject imports project from JSON string and creates new project
+func (a *App) ImportProject(name string, jsonData string) (*Project, error) {
+	var projData ProjectData
+	if err := json.Unmarshal([]byte(jsonData), &projData); err != nil {
+		return nil, fmt.Errorf("invalid project data: %v", err)
+	}
+
+	// Create new project entry
+	newProj, err := a.CreateProject(name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save the imported data to the new project
+	if err := a.SaveProjectData(newProj.ID, projData); err != nil {
+		// Cleanup if save fails
+		a.DeleteProject(newProj.ID)
+		return nil, err
+	}
+
+	return newProj, nil
+}
+
+// ExportGlobalAssets exports global assets as JSON string
+func (a *App) ExportGlobalAssets() (string, error) {
+	assetsRaw, err := a.GetAssets()
+	if err != nil {
+		return "", err
+	}
+	bytes, err := json.Marshal(assetsRaw)
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), nil
+}
+
+// ImportGlobalAssets imports global assets from JSON string
+func (a *App) ImportGlobalAssets(jsonData string, mergeMode bool) error {
+	var newAssets []Asset
+	// Try parsing as []Asset first
+	if err := json.Unmarshal([]byte(jsonData), &newAssets); err != nil {
+		// Fallback: try parsing as []map[string]interface{} and migrate
+		var rawMaps []map[string]interface{}
+		if err2 := json.Unmarshal([]byte(jsonData), &rawMaps); err2 != nil {
+			return fmt.Errorf("failed to parse assets: %v", err)
+		}
+		newAssets = migrateAssets(rawMaps)
+	} else {
+		// Check if migration is needed (legacy "shapes" key parsed as empty Entities)
+		needsMigration := false
+		for _, a := range newAssets {
+			if len(a.Entities) == 0 {
+				needsMigration = true
+				break
+			}
+		}
+		if needsMigration {
+			var rawMaps []map[string]interface{}
+			if err := json.Unmarshal([]byte(jsonData), &rawMaps); err == nil {
+				newAssets = migrateAssets(rawMaps)
+			}
+		}
+	}
+
+
+	if !mergeMode {
+		return a.SaveAssets(newAssets)
+	}
+
+	// Merge mode
+	currentRaw, err := a.GetAssets()
+	if err != nil {
+		return err
+	}
+
+	// Safe type assertion as GetAssets always returns []Asset
+	currentAssets, ok := currentRaw.([]Asset)
+	if !ok {
+		return fmt.Errorf("internal error: failed to cast current assets")
+	}
+
+	// Create map of existing assets for easy update
+	assetMap := make(map[string]int)
+	for i, asset := range currentAssets {
+		assetMap[asset.ID] = i
+	}
+
+	// Merge
+	for _, newAsset := range newAssets {
+		if idx, exists := assetMap[newAsset.ID]; exists {
+			// Update existing
+			currentAssets[idx] = newAsset
+		} else {
+			// Append new
+			currentAssets = append(currentAssets, newAsset)
+			assetMap[newAsset.ID] = len(currentAssets) - 1
+		}
+	}
+
+	return a.SaveAssets(currentAssets)
+}
+
 // --- 初期データ生成ロジック ---
 
 func getDefaultGlobalAssets() []Asset {

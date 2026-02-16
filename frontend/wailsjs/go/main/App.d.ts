@@ -6,6 +6,10 @@ export function CreateProject(arg1:string):Promise<main.Project>;
 
 export function DeleteProject(arg1:string):Promise<void>;
 
+export function ExportGlobalAssets():Promise<string>;
+
+export function ExportProject(arg1:string):Promise<string>;
+
 export function GetAssets():Promise<any>;
 
 export function GetPalette():Promise<any>;
@@ -13,6 +17,10 @@ export function GetPalette():Promise<any>;
 export function GetProjectData(arg1:string):Promise<main.ProjectData>;
 
 export function GetProjects():Promise<Array<main.Project>>;
+
+export function ImportGlobalAssets(arg1:string,arg2:boolean):Promise<void>;
+
+export function ImportProject(arg1:string,arg2:string):Promise<main.Project>;
 
 export function SaveAssets(arg1:any):Promise<void>;
 

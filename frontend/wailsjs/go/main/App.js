@@ -10,6 +10,14 @@ export function DeleteProject(arg1) {
   return window['go']['main']['App']['DeleteProject'](arg1);
 }
 
+export function ExportGlobalAssets() {
+  return window['go']['main']['App']['ExportGlobalAssets']();
+}
+
+export function ExportProject(arg1) {
+  return window['go']['main']['App']['ExportProject'](arg1);
+}
+
 export function GetAssets() {
   return window['go']['main']['App']['GetAssets']();
 }
@@ -24,6 +32,14 @@ export function GetProjectData(arg1) {
 
 export function GetProjects() {
   return window['go']['main']['App']['GetProjects']();
+}
+
+export function ImportGlobalAssets(arg1, arg2) {
+  return window['go']['main']['App']['ImportGlobalAssets'](arg1, arg2);
+}
+
+export function ImportProject(arg1, arg2) {
+  return window['go']['main']['App']['ImportProject'](arg1, arg2);
 }
 
 export function SaveAssets(arg1) {

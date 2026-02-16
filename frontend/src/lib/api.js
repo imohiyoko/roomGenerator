@@ -9,4 +9,8 @@ export const API = {
     saveProjectData: (id, d) => window.go?.main?.App?.SaveProjectData(id, d),
     deleteProject: (id) => window.go?.main?.App?.DeleteProject(id),
     updateProjectName: (id, name) => window.go?.main?.App?.UpdateProjectName(id, name),
+    exportProject: (id) => window.go?.main?.App?.ExportProject(id),
+    importProject: (name, jsonData) => window.go?.main?.App?.ImportProject(name, jsonData),
+    exportGlobalAssets: () => window.go?.main?.App?.ExportGlobalAssets(),
+    importGlobalAssets: (jsonData, mergeMode) => window.go?.main?.App?.ImportGlobalAssets(jsonData, mergeMode),
 };

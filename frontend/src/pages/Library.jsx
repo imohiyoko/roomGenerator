@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { API } from '../lib/api';
@@ -17,6 +17,46 @@ const Library = () => {
     const removeFromPalette = useStore(state => state.removeFromPalette);
     const updateDefaultColor = useStore(state => state.updateDefaultColor);
     const setDesignTargetId = useStore(state => state.setDesignTargetId);
+    const fileInputRef = useRef(null);
+
+    const handleExportAssets = async () => {
+        try {
+            const jsonStr = await API.exportGlobalAssets();
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `global_assets.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+            alert("エクスポートに失敗しました");
+        }
+    };
+
+    const handleImportAssets = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const text = await file.text();
+            if (confirm("既存のアセットに追加（マージ）しますか？\n[OK] 追加\n[キャンセル] 上書きまたは中止")) {
+                await API.importGlobalAssets(text, true);
+                alert("インポートしました（追加）。画面を更新します。");
+                window.location.reload();
+            } else {
+                if (confirm("既存のアセットを全て削除して上書きしますか？\nこの操作は取り消せません。")) {
+                    await API.importGlobalAssets(text, false);
+                    alert("インポートしました（上書き）。画面を更新します。");
+                    window.location.reload();
+                }
+            }
+        } catch (err) {
+            console.error(err);
+            alert("インポートに失敗しました: " + err);
+        }
+        e.target.value = '';
+    };
 
     return (
         <div className="min-h-screen bg-gray-100 overflow-auto">
@@ -73,10 +113,19 @@ const Library = () => {
                 <div className="bg-white rounded-lg shadow p-6">
                         <div className="flex items-center justify-between mb-4">
                         <h2 className="text-lg font-bold text-gray-700 flex items-center gap-2">📦 共通アセット</h2>
-                        <button onClick={async () => {
-                            await API.saveAssets(globalAssets.map(a => ({ ...a, source: undefined })));
-                            alert('保存しました');
-                        }} className="text-xs bg-green-50 text-green-600 px-3 py-1 rounded border border-green-200">変更を保存</button>
+                        <div className="flex gap-2">
+                            <input type="file" ref={fileInputRef} onChange={handleImportAssets} accept=".json" className="hidden" />
+                            <button onClick={() => fileInputRef.current.click()} className="text-xs bg-gray-50 text-gray-600 px-3 py-1 rounded border border-gray-200 flex items-center gap-1">
+                                <Icon p={Icons.Upload} size={12} /> インポート
+                            </button>
+                            <button onClick={handleExportAssets} className="text-xs bg-gray-50 text-gray-600 px-3 py-1 rounded border border-gray-200 flex items-center gap-1">
+                                <Icon p={Icons.Download} size={12} /> エクスポート
+                            </button>
+                            <button onClick={async () => {
+                                await API.saveAssets(globalAssets.map(a => ({ ...a, source: undefined })));
+                                alert('保存しました');
+                            }} className="text-xs bg-green-50 text-green-600 px-3 py-1 rounded border border-green-200">変更を保存</button>
+                        </div>
                     </div>
                     <div className="grid grid-cols-6 gap-3">
                             {globalAssets.map(asset => (
