@@ -18,7 +18,10 @@ export const ResizeHandle = ({ onResize, vertical = false, side = 'right' }) => 
     useEffect(() => {
         return () => {
             if (moveRef.current) window.removeEventListener('pointermove', moveRef.current);
-            if (upRef.current) window.removeEventListener('pointerup', upRef.current);
+            if (upRef.current) {
+                window.removeEventListener('pointerup', upRef.current);
+                window.removeEventListener('pointercancel', upRef.current);
+            }
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
         };
