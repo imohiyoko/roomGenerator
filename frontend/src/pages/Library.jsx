@@ -37,10 +37,8 @@ const Library = () => {
     };
 
     const handleRemoveCategory = (key) => {
-        if (!confirm(`カテゴリ「${categoryLabels[key]}」を削除しますか？\n※ プロジェクト内のローカルアセットがこのカテゴリを使用している場合、「未分類」として表示されます。`)) return;
-        const result = removeCategory(key);
-        if (result?.blocked) {
-            alert(`このカテゴリを使用している共通アセットが ${result.count} 件あります。\n先にアセットの種類を変更してから削除してください。`);
+        if (confirm(`カテゴリ「${categoryLabels[key]}」を削除しますか？\nこのカテゴリを使用しているアセットは色同期されなくなります。`)) {
+            removeCategory(key);
         }
     };
 

@@ -264,9 +264,6 @@ export const DesignProperties = () => {
                     <div className="prop-row">
                         <label className="prop-label">種類</label>
                         <select value={asset.type} onChange={e => updateRoot('type', e.target.value)} className="prop-input text-xs">
-                            {!categoryLabels[asset.type] && (
-                                <option value={asset.type}>{asset.type} (未分類)</option>
-                            )}
                             {Object.entries(categoryLabels).map(([key, label]) => (
                                 <option key={key} value={key}>{label}</option>
                             ))}

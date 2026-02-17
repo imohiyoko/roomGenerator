@@ -14,7 +14,7 @@ export const UnifiedSidebar = ({ mode, assets, onAddInstance, onAddText, setLoca
         // App.jsx から defaultColors が渡されていない場合のフォールバックを考慮
         // 初期状態では defaultColors は非同期ロードされるため、空の可能性がある
         const types = Object.keys(categoryLabels);
-        const firstType = types.includes('room') ? 'room' : (types.length > 0 ? types[0] : 'room');
+        const firstType = types.length > 0 ? types[0] : 'room';
         const defaultColor = (defaultColors && defaultColors[firstType]) ? defaultColors[firstType] : '#cccccc';
         const initialShape = {
             type: 'polygon',
@@ -107,41 +107,6 @@ export const UnifiedSidebar = ({ mode, assets, onAddInstance, onAddText, setLoca
                         </div>
                     );
                 })}
-                {/* Catch-all for orphaned assets whose type is not in categoryLabels */}
-                {(() => {
-                    const knownTypes = new Set(Object.keys(categoryLabels));
-                    const orphaned = filteredAssets.filter(a => !knownTypes.has(a.type));
-                    if (orphaned.length === 0) return null;
-                    return (
-                        <div className="mb-6">
-                            <div className="text-xs font-bold text-orange-400 mb-2 px-1 border-b pb-1 flex items-center gap-2">未分類</div>
-                            <div className="grid grid-cols-2 gap-2">
-                                {orphaned.map(a => {
-                                    const isSelected = mode === 'design' && designTargetId === a.id;
-                                    return (
-                                        <button key={a.id} onClick={() => handleClick(a)}
-                                            className={`flex flex-col items-center p-2 border rounded hover:bg-gray-50 text-center relative group transition
-                                                ${a.source === 'global' ? 'bg-blue-50/30 border-blue-100' : ''}
-                                                ${isSelected ? 'ring-2 ring-orange-400 bg-orange-50' : ''}
-                                            `}>
-                                            {a.source === 'global' && <div className="absolute top-1 right-1 text-blue-400"><Icon p={Icons.Globe} size={10} /></div>}
-                                            <div className="w-8 h-8 rounded mb-2 border shadow-sm flex items-center justify-center" style={{ backgroundColor: a.color }}></div>
-                                            <span className="text-[10px] w-full truncate font-medium text-gray-600">{a.name}</span>
-                                            {mode === 'design' && (
-                                                <div
-                                                    onClick={(e) => deleteAsset(e, a.id, a.source === 'global')}
-                                                    className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 p-1 transition"
-                                                >
-                                                    <Icon p={Icons.Trash} size={12} />
-                                                </div>
-                                            )}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    );
-                })()}
             </div>
         </div>
     );
