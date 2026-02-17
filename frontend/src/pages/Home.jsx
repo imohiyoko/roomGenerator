@@ -29,6 +29,14 @@ const Home = () => {
         setProjects(prev => prev.filter(p => p.id !== id));
     };
 
+    const handleRename = async (e, id, currentName) => {
+        e.stopPropagation();
+        const newName = prompt("新しいプロジェクト名を入力してください", currentName);
+        if (!newName || newName === currentName) return;
+        await API.updateProjectName(id, newName);
+        setProjects(prev => prev.map(p => p.id === id ? { ...p, name: newName } : p));
+    };
+
     const handleImport = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -37,7 +45,7 @@ const Home = () => {
         reader.onload = async (evt) => {
             try {
                 const json = evt.target.result;
-                const name = file.name.replace(".json", "");
+                const name = file.name.replace(/\.json$/i, "");
                 await API.importProject(name, json);
                 // Reload projects
                 const newProjects = await API.getProjects();
@@ -108,10 +116,13 @@ const Home = () => {
 
                                 {/* Action Buttons */}
                                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                                     <button onClick={(e) => handleExport(e, p.id)} className="p-1.5 bg-white rounded-full shadow border text-gray-400 hover:text-blue-600">
+                                    <button onClick={(e) => handleRename(e, p.id, p.name)} className="p-1.5 bg-white rounded-full shadow border text-gray-400 hover:text-green-600" title="名前変更">
+                                        <Icon p={Icons.Pen} size={14} />
+                                    </button>
+                                     <button onClick={(e) => handleExport(e, p.id)} className="p-1.5 bg-white rounded-full shadow border text-gray-400 hover:text-blue-600" title="エクスポート">
                                         <Icon p={Icons.Download} size={14} />
                                     </button>
-                                    <button onClick={(e) => handleDelete(e, p.id)} className="p-1.5 bg-white rounded-full shadow border text-gray-400 hover:text-red-500">
+                                    <button onClick={(e) => handleDelete(e, p.id)} className="p-1.5 bg-white rounded-full shadow border text-gray-400 hover:text-red-500" title="削除">
                                         <Icon p={Icons.Trash} size={14} />
                                     </button>
                                 </div>
