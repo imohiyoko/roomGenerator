@@ -83,7 +83,7 @@ export const createProjectSlice = (set, get) => ({
 
     updateProjectDefaultColor: (categoryKey, newColor) => {
         const state = get();
-        const projectDefaultColors = { ...state.projectDefaultColors, [categoryKey]: newColor };
+        const projectDefaultColors = { ...(state.projectDefaultColors || {}), [categoryKey]: newColor };
         // globalDefaultColors might be undefined if not loaded yet, but usually is loaded.
         // Fallback to DEFAULT_COLORS just in case.
         const baseColors = state.globalDefaultColors || DEFAULT_COLORS;
