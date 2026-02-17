@@ -37,8 +37,10 @@ const Library = () => {
     };
 
     const handleRemoveCategory = (key) => {
-        if (confirm(`カテゴリ「${categoryLabels[key]}」を削除しますか？\nこのカテゴリを使用しているアセットは色同期されなくなります。`)) {
-            removeCategory(key);
+        if (!confirm(`カテゴリ「${categoryLabels[key]}」を削除しますか？`)) return;
+        const result = removeCategory(key);
+        if (result?.blocked) {
+            alert(`このカテゴリを使用しているアセットが ${result.count} 件あります。\n先にアセットの種類を変更してから削除してください。`);
         }
     };
 

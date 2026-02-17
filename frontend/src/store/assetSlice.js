@@ -54,6 +54,14 @@ export const createAssetSlice = (set, get) => ({
 
     removeCategory: (key) => {
         const state = get();
+
+        // Check for assets using this category
+        const allAssets = [...state.localAssets, ...state.globalAssets];
+        const usedAssets = allAssets.filter(a => a.type === key);
+        if (usedAssets.length > 0) {
+            return { blocked: true, count: usedAssets.length };
+        }
+
         const newDefaults = { ...state.defaultColors };
         delete newDefaults[key];
         const newLabels = { ...state.categoryLabels };
@@ -61,6 +69,7 @@ export const createAssetSlice = (set, get) => ({
 
         set({ defaultColors: newDefaults, categoryLabels: newLabels });
         API.savePalette({ colors: state.colorPalette, defaults: newDefaults, labels: newLabels });
+        return { blocked: false };
     },
 
     updateCategoryLabel: (key, label) => {
