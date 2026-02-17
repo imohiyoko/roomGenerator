@@ -11,6 +11,22 @@ export const createUISlice = (set, get) => {
     };
 
     return {
+        // Core UI state
+        mode: 'layout',
+        selectedIds: [],
+        designTargetId: null,
+        selectedShapeIndices: [],
+        selectedPointIndex: null,
+        copiedInstances: [],
+
+        setMode: (mode) => set({ mode }),
+        setViewState: (updater) => set((state) => ({ viewState: typeof updater === 'function' ? updater(state.viewState) : updater })),
+        setSelectedIds: (updater) => set((state) => ({ selectedIds: typeof updater === 'function' ? updater(state.selectedIds) : updater })),
+        setDesignTargetId: (id) => set({ designTargetId: id }),
+        setSelectedShapeIndices: (updater) => set((state) => ({ selectedShapeIndices: typeof updater === 'function' ? updater(state.selectedShapeIndices) : updater })),
+        setSelectedPointIndex: (index) => set({ selectedPointIndex: index }),
+
+        // Sidebar layout state (persisted to localStorage)
         leftSidebarWidth: loadFromStorage('ui_leftSidebarWidth', 256),
         rightSidebarWidth: loadFromStorage('ui_rightSidebarWidth', 288),
         leftSidebarCollapsed: loadFromStorage('ui_leftSidebarCollapsed', false),
