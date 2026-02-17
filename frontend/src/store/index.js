@@ -17,10 +17,21 @@ export const useStore = create(
             // Zundo Configuration
             partialize: (state) => ({
                 localAssets: state.localAssets,
-                instances: state.instances
+                instances: state.instances,
+                projectDefaultColors: state.projectDefaultColors,
             }),
             limit: 50, // Limit history stack size
             equality: (a, b) => JSON.stringify(a) === JSON.stringify(b), // Simple deep equality check
+            // Recompute effective defaultColors when undo/redo restores projectDefaultColors
+            handleSet: (handleSet) => (state) => {
+                handleSet(state);
+                if (state.projectDefaultColors !== undefined) {
+                    const current = useStore.getState();
+                    const globalDefaults = current.globalDefaultColors || {};
+                    const defaultColors = { ...globalDefaults, ...(state.projectDefaultColors || {}) };
+                    useStore.setState({ defaultColors });
+                }
+            },
         }
     )
 );
