@@ -89,7 +89,7 @@ export const createProjectSlice = (set, get) => ({
         const baseColors = state.globalDefaultColors || DEFAULT_COLORS;
         const defaultColors = { ...baseColors, ...projectDefaultColors };
 
-        const newLocalAssets = syncAssetColors(state.localAssets, defaultColors);
+        const newLocalAssets = syncAssetColors(state.localAssets || [], defaultColors);
 
         set({
             projectDefaultColors,
@@ -104,7 +104,7 @@ export const createProjectSlice = (set, get) => ({
         const baseColors = state.globalDefaultColors || DEFAULT_COLORS;
         const defaultColors = { ...baseColors };
 
-        const newLocalAssets = syncAssetColors(state.localAssets, defaultColors);
+        const newLocalAssets = syncAssetColors(state.localAssets || [], defaultColors);
 
         set({
             projectDefaultColors,
