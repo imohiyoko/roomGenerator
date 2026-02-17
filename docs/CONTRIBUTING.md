@@ -36,6 +36,7 @@ roomGenerator/
 
 3.  **Architecture:**
     Please refer to [ARCHITECTURE.md](./ARCHITECTURE.md) for a detailed overview of the system design.
+    For a comprehensive map of functions, components, and URLs, see [SYSTEM_MAP.md](./SYSTEM_MAP.md).
 
 ## Key Concepts
 
