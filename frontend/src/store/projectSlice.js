@@ -32,8 +32,12 @@ export const createProjectSlice = (set, get) => ({
         });
 
         const colorPalette = paletteData?.colors || [];
-        const defaultColors = paletteData?.defaults || DEFAULT_COLORS;
+        const globalDefaultColors = paletteData?.defaults || DEFAULT_COLORS;
         const categoryLabels = paletteData?.labels || {};
+        const projectDefaultColors = projectData?.defaultColors || {};
+
+        // Merge defaults: Project specific overrides global
+        const defaultColors = { ...globalDefaultColors, ...projectDefaultColors };
 
         // Normalize loaded local assets
         let loadedAssets = (projectData?.assets || []).map(normalizeAsset);
@@ -51,7 +55,9 @@ export const createProjectSlice = (set, get) => ({
         set({
             globalAssets,
             colorPalette,
-            defaultColors,
+            globalDefaultColors,   // Store base global defaults
+            projectDefaultColors,  // Store project-specific overrides
+            defaultColors,         // Effective defaults
             categoryLabels,
             localAssets: loadedAssets,
             instances,
@@ -70,7 +76,40 @@ export const createProjectSlice = (set, get) => ({
         if (!state.currentProjectId) return;
         await API.saveProjectData(state.currentProjectId, {
             assets: state.localAssets,
-            instances: state.instances
+            instances: state.instances,
+            defaultColors: state.projectDefaultColors
+        });
+    },
+
+    updateProjectDefaultColor: (categoryKey, newColor) => {
+        const state = get();
+        const projectDefaultColors = { ...(state.projectDefaultColors || {}), [categoryKey]: newColor };
+        // globalDefaultColors might be undefined if not loaded yet, but usually is loaded.
+        // Fallback to DEFAULT_COLORS just in case.
+        const baseColors = state.globalDefaultColors || DEFAULT_COLORS;
+        const defaultColors = { ...baseColors, ...projectDefaultColors };
+
+        const newLocalAssets = syncAssetColors(state.localAssets || [], defaultColors);
+
+        set({
+            projectDefaultColors,
+            defaultColors,
+            localAssets: newLocalAssets
+        });
+    },
+
+    resetProjectDefaultColors: () => {
+        const state = get();
+        const projectDefaultColors = {};
+        const baseColors = state.globalDefaultColors || DEFAULT_COLORS;
+        const defaultColors = { ...baseColors };
+
+        const newLocalAssets = syncAssetColors(state.localAssets || [], defaultColors);
+
+        set({
+            projectDefaultColors,
+            defaultColors,
+            localAssets: newLocalAssets
         });
     }
 });

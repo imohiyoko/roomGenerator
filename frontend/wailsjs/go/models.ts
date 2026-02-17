@@ -219,6 +219,7 @@ export namespace main {
 	export class ProjectData {
 	    assets: Asset[];
 	    instances: Instance[];
+	    defaultColors?: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProjectData(source);
@@ -228,6 +229,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.assets = this.convertValues(source["assets"], Asset);
 	        this.instances = this.convertValues(source["instances"], Instance);
+	        this.defaultColors = source["defaultColors"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
