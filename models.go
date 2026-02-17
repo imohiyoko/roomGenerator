@@ -88,6 +88,7 @@ type Instance struct {
 
 // ProjectData represents the full data content of a project file.
 type ProjectData struct {
-	LocalAssets []Asset    `json:"assets"`
-	Instances   []Instance `json:"instances"`
+	LocalAssets   []Asset           `json:"assets"`
+	Instances     []Instance        `json:"instances"`
+	DefaultColors map[string]string `json:"defaultColors,omitempty"`
 }

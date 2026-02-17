@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore as useVanillaStore } from 'zustand';
 import { useStore } from '../store';
@@ -8,6 +8,7 @@ import { LayoutCanvas } from '../components/LayoutCanvas';
 import { DesignCanvas } from '../components/DesignCanvas';
 import { LayoutProperties } from '../components/LayoutProperties';
 import { DesignProperties } from '../components/DesignProperties';
+import { ProjectSettingsModal } from '../components/ProjectSettingsModal';
 import { Ruler } from '../components/Ruler';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
@@ -15,6 +16,7 @@ import { useKeyboardControls } from '../hooks/useKeyboardControls';
 const Editor = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const [showSettings, setShowSettings] = useState(false);
 
     // --- Store Selectors ---
     const projects = useStore(state => state.projects);
@@ -83,7 +85,10 @@ const Editor = () => {
             <div className="w-64 flex-shrink-0 border-r bg-white flex flex-col z-20 shadow-sm">
                 <div className="p-3 border-b flex items-center justify-between bg-gray-50">
                     <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-800 p-1 rounded hover:bg-gray-200"><Icon p={Icons.LogOut} /></button>
-                    <span className="font-bold text-sm truncate px-2">{activeProject?.name || 'Loading...'}</span>
+                    <div className="flex items-center min-w-0 flex-1 justify-center">
+                        <span className="font-bold text-sm truncate px-1">{activeProject?.name || 'Loading...'}</span>
+                        <button onClick={() => setShowSettings(true)} className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-200" title="プロジェクト設定"><Icon p={Icons.Settings} size={14}/></button>
+                    </div>
                     <div className="flex gap-1">
                         <button onClick={() => undo()} disabled={pastStates.length === 0} className={`p-1 rounded ${pastStates.length > 0 ? 'hover:bg-gray-200 text-gray-600' : 'text-gray-300'}`} title="Undo (Ctrl+Z)"><Icon p={Icons.Undo} size={14}/></button>
                         <button onClick={() => redo()} disabled={futureStates.length === 0} className={`p-1 rounded ${futureStates.length > 0 ? 'hover:bg-gray-200 text-gray-600' : 'text-gray-300'}`} title="Redo (Ctrl+Shift+Z)"><Icon p={Icons.Redo} size={14}/></button>
@@ -142,6 +147,7 @@ const Editor = () => {
                     <DesignProperties />
                 )}
             </div>
+            {showSettings && <ProjectSettingsModal onClose={() => setShowSettings(false)} />}
         </div>
     );
 };
