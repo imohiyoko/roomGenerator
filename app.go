@@ -649,8 +649,9 @@ func (a *App) ExportProject(id string) (string, error) {
 
 // ImportProject imports project from JSON string and creates new project
 func (a *App) ImportProject(name string, jsonData string) (*Project, error) {
-	var projData ProjectData
-	if err := json.Unmarshal([]byte(jsonData), &projData); err != nil {
+	// Validate that the JSON is a valid object (not an array or primitive)
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonData), &raw); err != nil {
 		return nil, fmt.Errorf("invalid project data: %v", err)
 	}
 
@@ -660,8 +661,9 @@ func (a *App) ImportProject(name string, jsonData string) (*Project, error) {
 		return nil, err
 	}
 
-	// Save the imported data to the new project
-	if err := a.SaveProjectData(newProj.ID, projData); err != nil {
+	// Pass raw JSON as json.RawMessage so SaveProjectData preserves the original
+	// bytes (including legacy "shapes" keys) for normalizeProjectData to migrate.
+	if err := a.SaveProjectData(newProj.ID, json.RawMessage(jsonData)); err != nil {
 		// Cleanup if save fails
 		a.DeleteProject(newProj.ID)
 		return nil, err
