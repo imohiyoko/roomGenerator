@@ -766,6 +766,40 @@ func (a *App) ImportGlobalAssets(jsonData string, mergeMode bool) error {
 	return a.SaveAssets(currentAssets)
 }
 
+// GetSettings returns application settings
+func (a *App) GetSettings() (AppSettings, error) {
+	filePath := filepath.Join(a.dataDir, "settings.json")
+	defaultSettings := AppSettings{
+		GridSize:         20,
+		SnapInterval:     10,
+		InitialZoom:      1.0,
+		AutoSaveInterval: 30000,
+	}
+
+	data, err := a.loadJSON(filePath)
+	if err != nil {
+		a.logInfo("settings.json が見つかりません。デフォルト設定を返します")
+		return defaultSettings, nil
+	}
+
+	var settings AppSettings
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return defaultSettings, nil
+	}
+	return settings, nil
+}
+
+// SaveSettings saves application settings
+func (a *App) SaveSettings(settings AppSettings) error {
+	filePath := filepath.Join(a.dataDir, "settings.json")
+	if err := a.saveFile(filePath, settings); err != nil {
+		a.logError("設定保存失敗: %v", err)
+		return err
+	}
+	a.logInfo("設定を保存しました")
+	return nil
+}
+
 // --- 初期データ生成ロジック ---
 
 func getDefaultGlobalAssets() []Asset {

@@ -13,4 +13,6 @@ export const API = {
     importProject: (name, jsonData) => window.go?.main?.App?.ImportProject(name, jsonData),
     exportGlobalAssets: () => window.go?.main?.App?.ExportGlobalAssets(),
     importGlobalAssets: (jsonData, mergeMode) => window.go?.main?.App?.ImportGlobalAssets(jsonData, mergeMode),
+    getSettings: () => window.go?.main?.App?.GetSettings() ?? Promise.resolve({ gridSize: 20, snapInterval: 10, initialZoom: 1.0, autoSaveInterval: 30000 }),
+    saveSettings: (s) => window.go?.main?.App?.SaveSettings(s),
 };
