@@ -250,17 +250,15 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
 /**
  * Main container for the Design Mode canvas.
  * Manages state, event handling, and delegates rendering to DesignCanvasRender.
- *
- * @param {Object} props - The component props.
- * @param {Object} props.viewState - Current view state (x, y, scale).
- * @param {Function} props.setViewState - Setter for view state.
- * @param {Array} props.assets - List of all available assets.
- * @param {string} props.designTargetId - ID of the asset currently being designed.
- * @param {Function} props.setLocalAssets - Setter for updating local assets.
- * @param {Function} props.setGlobalAssets - Setter for updating global assets (unused but passed).
- * @returns {JSX.Element|null} The DesignCanvas component.
  */
-export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, setLocalAssets, setGlobalAssets }) => {
+export const DesignCanvas = () => {
+    const viewState = useStore(state => state.viewState);
+    const setViewState = useStore(state => state.setViewState);
+    const localAssets = useStore(state => state.localAssets);
+    const setLocalAssets = useStore(state => state.setLocalAssets);
+    const globalAssets = useStore(state => state.globalAssets);
+    const designTargetId = useStore(state => state.designTargetId);
+
     const selectedShapeIndices = useStore(state => state.selectedShapeIndices);
     const setSelectedShapeIndices = useStore(state => state.setSelectedShapeIndices);
     const selectedPointIndex = useStore(state => state.selectedPointIndex);
@@ -272,7 +270,9 @@ export const DesignCanvas = ({ viewState, setViewState, assets, designTargetId, 
     const svgRef = useRef(null);
     const [marquee, setMarquee] = useState(null);
 
+    const assets = [...localAssets, ...globalAssets];
     const assetFromStore = assets.find(a => a.id === designTargetId);
+
     const localAssetRef = useRef(null);
     useEffect(() => {
         localAssetRef.current = localAsset;
