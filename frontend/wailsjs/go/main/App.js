@@ -34,6 +34,10 @@ export function GetProjects() {
   return window['go']['main']['App']['GetProjects']();
 }
 
+export function GetSettings() {
+  return window['go']['main']['App']['GetSettings']();
+}
+
 export function ImportGlobalAssets(arg1, arg2) {
   return window['go']['main']['App']['ImportGlobalAssets'](arg1, arg2);
 }
@@ -52,6 +56,10 @@ export function SavePalette(arg1) {
 
 export function SaveProjectData(arg1, arg2) {
   return window['go']['main']['App']['SaveProjectData'](arg1, arg2);
+}
+
+export function SaveSettings(arg1) {
+  return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
 export function UpdateProjectName(arg1, arg2) {

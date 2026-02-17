@@ -18,6 +18,8 @@ export function GetProjectData(arg1:string):Promise<main.ProjectData>;
 
 export function GetProjects():Promise<Array<main.Project>>;
 
+export function GetSettings():Promise<main.AppSettings>;
+
 export function ImportGlobalAssets(arg1:string,arg2:boolean):Promise<void>;
 
 export function ImportProject(arg1:string,arg2:string):Promise<main.Project>;
@@ -27,5 +29,7 @@ export function SaveAssets(arg1:any):Promise<void>;
 export function SavePalette(arg1:any):Promise<void>;
 
 export function SaveProjectData(arg1:string,arg2:any):Promise<void>;
+
+export function SaveSettings(arg1:main.AppSettings):Promise<void>;
 
 export function UpdateProjectName(arg1:string,arg2:string):Promise<void>;

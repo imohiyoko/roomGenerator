@@ -4,6 +4,7 @@ import { createProjectSlice } from './projectSlice';
 import { createAssetSlice } from './assetSlice';
 import { createUISlice } from './uiSlice';
 import { createInstanceSlice } from './instanceSlice';
+import { createSettingsSlice } from './settingsSlice';
 
 export const useStore = create(
     temporal(
@@ -12,6 +13,7 @@ export const useStore = create(
             ...createAssetSlice(...a),
             ...createUISlice(...a),
             ...createInstanceSlice(...a),
+            ...createSettingsSlice(...a),
         }),
         {
             // Zundo Configuration
@@ -19,6 +21,7 @@ export const useStore = create(
                 localAssets: state.localAssets,
                 instances: state.instances,
                 projectDefaultColors: state.projectDefaultColors,
+                // UI and Settings are excluded from Undo/Redo
             }),
             limit: 50, // Limit history stack size
             equality: (a, b) => JSON.stringify(a) === JSON.stringify(b), // Simple deep equality check

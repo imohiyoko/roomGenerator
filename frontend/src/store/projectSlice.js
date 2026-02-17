@@ -7,6 +7,7 @@ const DEFAULT_COLORS = { room: '#fdfcdc', furniture: '#8fbc8f', fixture: '#ccccc
 export const createProjectSlice = (set, get) => ({
     projects: [],
     currentProjectId: null,
+    viewState: { x: 50, y: 600, scale: 1 },
 
     setProjects: (updater) => set((state) => ({ projects: typeof updater === 'function' ? updater(state.projects) : updater })),
     setCurrentProjectId: (id) => set({ currentProjectId: id }),

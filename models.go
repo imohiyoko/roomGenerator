@@ -92,3 +92,11 @@ type ProjectData struct {
 	Instances     []Instance        `json:"instances"`
 	DefaultColors map[string]string `json:"defaultColors,omitempty"`
 }
+
+// AppSettings represents the application-wide settings.
+type AppSettings struct {
+	GridSize         float64 `json:"gridSize"`
+	SnapInterval     float64 `json:"snapInterval"`
+	InitialZoom      float64 `json:"initialZoom"`
+	AutoSaveInterval int     `json:"autoSaveInterval"`
+}

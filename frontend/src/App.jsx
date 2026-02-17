@@ -6,6 +6,7 @@ import { useStore } from './store';
 import Home from './pages/Home';
 import Library from './pages/Library';
 import Editor from './pages/Editor';
+import Settings from './pages/Settings';
 
 const App = () => {
     // --- Store Selectors ---
@@ -14,6 +15,7 @@ const App = () => {
     const setColorPalette = useStore(state => state.setColorPalette);
     const setDefaultColors = useStore(state => state.setDefaultColors);
     const setCategoryLabels = useStore(state => state.setCategoryLabels);
+    const setAllSettings = useStore(state => state.setAllSettings);
 
     // --- Effects ---
 
@@ -26,6 +28,9 @@ const App = () => {
             if (data?.defaults) setDefaultColors(data.defaults);
             if (data?.labels) setCategoryLabels(data.labels);
         });
+        API.getSettings().then(settings => {
+            if (settings) setAllSettings(settings);
+        });
     }, []);
 
     return (
@@ -34,6 +39,7 @@ const App = () => {
                 <Route path="/" element={<Home />} />
                 <Route path="/library" element={<Library />} />
                 <Route path="/project/:id" element={<Editor />} />
+                <Route path="/settings" element={<Settings />} />
             </Routes>
         </HashRouter>
     );

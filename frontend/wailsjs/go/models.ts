@@ -1,5 +1,23 @@
 export namespace main {
 	
+	export class AppSettings {
+	    gridSize: number;
+	    snapInterval: number;
+	    initialZoom: number;
+	    autoSaveInterval: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.gridSize = source["gridSize"];
+	        this.snapInterval = source["snapInterval"];
+	        this.initialZoom = source["initialZoom"];
+	        this.autoSaveInterval = source["autoSaveInterval"];
+	    }
+	}
 	export class Vec2 {
 	    x: number;
 	    y: number;

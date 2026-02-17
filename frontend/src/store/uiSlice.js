@@ -1,16 +1,58 @@
-export const createUISlice = (set, get) => ({
-    mode: 'layout',
-    viewState: { x: 50, y: 50, scale: 1 },
-    selectedIds: [],
-    designTargetId: null,
-    selectedShapeIndices: [],
-    selectedPointIndex: null,
-    copiedInstances: [],
+export const createUISlice = (set, get) => {
+    // Load initial state from localStorage if available
+    const loadFromStorage = (key, defaultValue) => {
+        const stored = localStorage.getItem(key);
+        if (stored === null) return defaultValue;
+        try {
+            return JSON.parse(stored);
+        } catch (e) {
+            return defaultValue;
+        }
+    };
 
-    setMode: (mode) => set({ mode }),
-    setViewState: (updater) => set((state) => ({ viewState: typeof updater === 'function' ? updater(state.viewState) : updater })),
-    setSelectedIds: (updater) => set((state) => ({ selectedIds: typeof updater === 'function' ? updater(state.selectedIds) : updater })),
-    setDesignTargetId: (id) => set({ designTargetId: id }),
-    setSelectedShapeIndices: (updater) => set((state) => ({ selectedShapeIndices: typeof updater === 'function' ? updater(state.selectedShapeIndices) : updater })),
-    setSelectedPointIndex: (index) => set({ selectedPointIndex: index }),
-});
+    return {
+        // Core UI state
+        mode: 'layout',
+        selectedIds: [],
+        designTargetId: null,
+        selectedShapeIndices: [],
+        selectedPointIndex: null,
+        copiedInstances: [],
+
+        setMode: (mode) => set({ mode }),
+        setViewState: (updater) => set((state) => ({ viewState: typeof updater === 'function' ? updater(state.viewState) : updater })),
+        setSelectedIds: (updater) => set((state) => ({ selectedIds: typeof updater === 'function' ? updater(state.selectedIds) : updater })),
+        setDesignTargetId: (id) => set({ designTargetId: id }),
+        setSelectedShapeIndices: (updater) => set((state) => ({ selectedShapeIndices: typeof updater === 'function' ? updater(state.selectedShapeIndices) : updater })),
+        setSelectedPointIndex: (index) => set({ selectedPointIndex: index }),
+
+        // Sidebar layout state (persisted to localStorage)
+        leftSidebarWidth: loadFromStorage('ui_leftSidebarWidth', 256),
+        rightSidebarWidth: loadFromStorage('ui_rightSidebarWidth', 288),
+        leftSidebarCollapsed: loadFromStorage('ui_leftSidebarCollapsed', false),
+        rightSidebarCollapsed: loadFromStorage('ui_rightSidebarCollapsed', false),
+
+        setLeftSidebarWidth: (widthOrUpdater) => set(state => {
+            const newWidth = typeof widthOrUpdater === 'function' ? widthOrUpdater(state.leftSidebarWidth) : widthOrUpdater;
+            const clamped = Math.max(200, Math.min(600, newWidth));
+            localStorage.setItem('ui_leftSidebarWidth', JSON.stringify(clamped));
+            return { leftSidebarWidth: clamped };
+        }),
+        setRightSidebarWidth: (widthOrUpdater) => set(state => {
+            const newWidth = typeof widthOrUpdater === 'function' ? widthOrUpdater(state.rightSidebarWidth) : widthOrUpdater;
+            const clamped = Math.max(200, Math.min(600, newWidth));
+            localStorage.setItem('ui_rightSidebarWidth', JSON.stringify(clamped));
+            return { rightSidebarWidth: clamped };
+        }),
+        toggleLeftSidebar: () => set(state => {
+            const newState = !state.leftSidebarCollapsed;
+            localStorage.setItem('ui_leftSidebarCollapsed', JSON.stringify(newState));
+            return { leftSidebarCollapsed: newState };
+        }),
+        toggleRightSidebar: () => set(state => {
+            const newState = !state.rightSidebarCollapsed;
+            localStorage.setItem('ui_rightSidebarCollapsed', JSON.stringify(newState));
+            return { rightSidebarCollapsed: newState };
+        }),
+    };
+};
