@@ -10,25 +10,23 @@ const Home = () => {
     const projects = useStore(state => state.projects);
     const setProjects = useStore(state => state.setProjects);
 
-    const setProjects = useStore(state => state.setProjects);
-
     const fileInputRef = useRef(null);
 
     const handleCreate = async () => {
         const name = prompt("プロジェクト名を入力してください", "新しいプロジェクト");
-        if (name) {
-            const id = await createProject(name);
-            if (id) {
-                navigate(`/project/${id}`);
-            }
+        if (!name) return;
+        const newProj = await API.createProject(name);
+        if (newProj) {
+            setProjects(prev => [...prev, newProj]);
+            navigate(`/project/${newProj.id}`);
         }
     };
 
     const handleDelete = async (e, id) => {
         e.stopPropagation();
-        if (confirm("プロジェクトを削除しますか？")) {
-            await deleteProject(id);
-        }
+        if (!confirm("プロジェクトを削除しますか？")) return;
+        await API.deleteProject(id);
+        setProjects(prev => prev.filter(p => p.id !== id));
     };
 
     const handleImport = async (e) => {
