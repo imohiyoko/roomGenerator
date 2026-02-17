@@ -176,6 +176,11 @@ func (a *App) GetPalette() (interface{}, error) {
 		"furniture": "#8fbc8f",
 		"fixture":   "#cccccc",
 	}
+	defaultTypeLabels := map[string]string{
+		"room":      "部屋・床",
+		"furniture": "家具",
+		"fixture":   "設備・建具",
+	}
 
 	data, err := a.loadJSON(filePath)
 	if err != nil {
@@ -184,6 +189,7 @@ func (a *App) GetPalette() (interface{}, error) {
 		defaultData := map[string]interface{}{
 			"colors":   defaultColors,
 			"defaults": defaultTypeColors,
+			"labels":   defaultTypeLabels,
 		}
 		if err := a.saveFile(filePath, defaultData); err != nil {
 			a.logError("palette.json 作成失敗: %v", err)
@@ -194,6 +200,15 @@ func (a *App) GetPalette() (interface{}, error) {
 	var palette map[string]interface{}
 	if err := json.Unmarshal(data, &palette); err != nil {
 		return nil, err
+	}
+
+	// マイグレーション: labels がない場合は追加
+	if _, ok := palette["labels"]; !ok {
+		a.logInfo("palette.json に labels がないため、デフォルト値を追加して保存します")
+		palette["labels"] = defaultTypeLabels
+		if err := a.saveFile(filePath, palette); err != nil {
+			a.logError("palette.json 更新失敗: %v", err)
+		}
 	}
 
 	return palette, nil

@@ -13,6 +13,7 @@ const App = () => {
     const setGlobalAssets = useStore(state => state.setGlobalAssets);
     const setColorPalette = useStore(state => state.setColorPalette);
     const setDefaultColors = useStore(state => state.setDefaultColors);
+    const setCategoryLabels = useStore(state => state.setCategoryLabels);
 
     // --- Effects ---
 
@@ -23,6 +24,7 @@ const App = () => {
         API.getPalette().then(data => {
             if (data?.colors) setColorPalette(data.colors);
             if (data?.defaults) setDefaultColors(data.defaults);
+            if (data?.labels) setCategoryLabels(data.labels);
         });
     }, []);
 

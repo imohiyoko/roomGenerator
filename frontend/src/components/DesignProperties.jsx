@@ -17,6 +17,7 @@ export const DesignProperties = () => {
     const palette = useStore(state => state.colorPalette);
     const onAddToPalette = useStore(state => state.addToPalette);
     const defaultColors = useStore(state => state.defaultColors);
+    const categoryLabels = useStore(state => state.categoryLabels);
 
     const selectedShapeIndices = useStore(state => state.selectedShapeIndices);
     const setSelectedShapeIndices = useStore(state => state.setSelectedShapeIndices);
@@ -263,9 +264,9 @@ export const DesignProperties = () => {
                     <div className="prop-row">
                         <label className="prop-label">種類</label>
                         <select value={asset.type} onChange={e => updateRoot('type', e.target.value)} className="prop-input text-xs">
-                            <option value="room">部屋・床</option>
-                            <option value="fixture">設備・建具</option>
-                            <option value="furniture">家具</option>
+                            {Object.entries(categoryLabels).map(([key, label]) => (
+                                <option key={key} value={key}>{label}</option>
+                            ))}
                         </select>
                     </div>
                     <div className="pt-2">

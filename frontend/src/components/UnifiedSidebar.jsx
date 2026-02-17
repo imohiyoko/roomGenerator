@@ -1,8 +1,11 @@
 import React from 'react';
+import { useStore } from '../store';
 import { Icon, Icons } from './Icon';
 import { createRectPath } from '../lib/utils';
 
 export const UnifiedSidebar = ({ mode, assets, onAddInstance, onAddText, setLocalAssets, setGlobalAssets, setDesignTargetId, designTargetId, instances, setInstances, defaultColors }) => {
+    const categoryLabels = useStore(state => state.categoryLabels);
+
     // 常にローカルアセットのみ表示（globalはプロジェクト読込時に自動フォーク済み）
     const filteredAssets = assets.filter(a => !a.source || a.source !== 'global');
 
@@ -10,14 +13,16 @@ export const UnifiedSidebar = ({ mode, assets, onAddInstance, onAddText, setLoca
     const addNewAsset = () => {
         // App.jsx から defaultColors が渡されていない場合のフォールバックを考慮
         // 初期状態では defaultColors は非同期ロードされるため、空の可能性がある
-        const defaultColor = (defaultColors && defaultColors.room) ? defaultColors.room : '#cccccc';
+        const types = Object.keys(categoryLabels);
+        const firstType = types.length > 0 ? types[0] : 'room';
+        const defaultColor = (defaultColors && defaultColors[firstType]) ? defaultColors[firstType] : '#cccccc';
         const initialShape = {
             type: 'polygon',
             points: createRectPath(60, 60, 0, 0),
             color: defaultColor
         };
         const newA = {
-            id: `a-${Date.now()}`, name: '新規パーツ', type: 'room',
+            id: `a-${Date.now()}`, name: '新規パーツ', type: firstType,
             w: 60, h: 60, color: defaultColor, snap: true,
             isDefaultShape: true, // デフォルト形状フラグ
             shapes: [initialShape]
@@ -66,10 +71,10 @@ export const UnifiedSidebar = ({ mode, assets, onAddInstance, onAddText, setLoca
 
             {/* Asset List (Grid) */}
             <div className="flex-1 overflow-y-auto p-3">
-                {['room', 'fixture', 'furniture'].map(type => {
+                {Object.keys(categoryLabels).map(type => {
                     const typeAssets = filteredAssets.filter(a => a.type === type);
                     if (typeAssets.length === 0) return null;
-                    const label = type === 'room' ? '部屋' : type === 'fixture' ? '設備' : '家具';
+                    const label = categoryLabels[type] || type;
                     return (
                         <div key={type} className="mb-6">
                             <div className="text-xs font-bold text-gray-400 mb-2 px-1 border-b pb-1 flex items-center gap-2">{label}</div>

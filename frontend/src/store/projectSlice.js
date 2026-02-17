@@ -33,6 +33,7 @@ export const createProjectSlice = (set, get) => ({
 
         const colorPalette = paletteData?.colors || [];
         const defaultColors = paletteData?.defaults || DEFAULT_COLORS;
+        const categoryLabels = paletteData?.labels || {};
 
         // Normalize loaded local assets
         let loadedAssets = (projectData?.assets || []).map(normalizeAsset);
@@ -51,6 +52,7 @@ export const createProjectSlice = (set, get) => ({
             globalAssets,
             colorPalette,
             defaultColors,
+            categoryLabels,
             localAssets: loadedAssets,
             instances,
             selectedIds: [],
