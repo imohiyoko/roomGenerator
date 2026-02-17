@@ -14,7 +14,7 @@ export const UnifiedSidebar = ({ mode, assets, onAddInstance, onAddText, setLoca
         // App.jsx から defaultColors が渡されていない場合のフォールバックを考慮
         // 初期状態では defaultColors は非同期ロードされるため、空の可能性がある
         const types = Object.keys(categoryLabels);
-        const firstType = types.length > 0 ? types[0] : 'room';
+        const firstType = types.includes('room') ? 'room' : (types.length > 0 ? types[0] : 'room');
         const defaultColor = (defaultColors && defaultColors[firstType]) ? defaultColors[firstType] : '#cccccc';
         const initialShape = {
             type: 'polygon',
