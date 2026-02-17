@@ -227,7 +227,8 @@ export const LayoutCanvas = () => {
         return localInstances.map(inst => {
             if (inst.type === 'text') return { ...inst, z: 99 };
             const asset = assets.find(a => a.id === inst.assetId);
-            return asset ? { ...inst, ...asset, id: inst.id, z: LAYERS[asset.type] } : null;
+            const z = (asset && LAYERS[asset.type] !== undefined) ? LAYERS[asset.type] : 2;
+            return asset ? { ...inst, ...asset, id: inst.id, z } : null;
         }).filter(Boolean).sort((a, b) => {
             const aSelected = selectedIds.includes(a.id) ? 1000 : 0;
             const bSelected = selectedIds.includes(b.id) ? 1000 : 0;
