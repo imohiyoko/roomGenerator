@@ -22,16 +22,18 @@ export const useStore = create(
             }),
             limit: 50, // Limit history stack size
             equality: (a, b) => JSON.stringify(a) === JSON.stringify(b), // Simple deep equality check
-            // Recompute effective defaultColors when undo/redo restores projectDefaultColors
-            handleSet: (handleSet) => (state) => {
-                handleSet(state);
-                if (state.projectDefaultColors !== undefined) {
-                    const current = useStore.getState();
-                    const globalDefaults = current.globalDefaultColors || {};
-                    const defaultColors = { ...globalDefaults, ...(state.projectDefaultColors || {}) };
-                    useStore.setState({ defaultColors });
-                }
-            },
         }
     )
 );
+
+// Recompute effective defaultColors whenever projectDefaultColors changes
+// (including after undo/redo, which bypasses zundo's handleSet).
+useStore.subscribe((state, prevState) => {
+    if (state.projectDefaultColors !== prevState.projectDefaultColors) {
+        const globalDefaults = state.globalDefaultColors || {};
+        const defaultColors = { ...globalDefaults, ...(state.projectDefaultColors || {}) };
+        if (JSON.stringify(defaultColors) !== JSON.stringify(state.defaultColors)) {
+            useStore.setState({ defaultColors });
+        }
+    }
+});
