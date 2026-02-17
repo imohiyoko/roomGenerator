@@ -56,10 +56,10 @@ export const createAssetSlice = (set, get) => ({
         const state = get();
 
         // Check for assets using this category
-        const allAssets = [...state.localAssets, ...state.globalAssets];
-        const usedAssets = allAssets.filter(a => a.type === key);
-        if (usedAssets.length > 0) {
-            return { blocked: true, count: usedAssets.length };
+        const globalOnly = state.globalAssets.filter(a => a.type === key);
+        if (globalOnly.length > 0) {
+            return { blocked: true, count: globalOnly.length };
+        }
         }
 
         const newDefaults = { ...state.defaultColors };
