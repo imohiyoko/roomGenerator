@@ -1,35 +1,62 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export const ResizeHandle = ({ onResize, vertical = false, side = 'right' }) => {
     const [isDragging, setIsDragging] = useState(false);
     const startRef = useRef(0);
+    const onResizeRef = useRef(onResize);
+    const verticalRef = useRef(vertical);
+    const moveRef = useRef(null);
+    const upRef = useRef(null);
+
+    // Keep refs in sync with latest props
+    useEffect(() => {
+        onResizeRef.current = onResize;
+        verticalRef.current = vertical;
+    });
+
+    // Cleanup on unmount — remove any lingering listeners
+    useEffect(() => {
+        return () => {
+            if (moveRef.current) window.removeEventListener('pointermove', moveRef.current);
+            if (upRef.current) window.removeEventListener('pointerup', upRef.current);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+    }, []);
 
     const handlePointerDown = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setIsDragging(true);
-        startRef.current = vertical ? e.clientY : e.clientX;
+        startRef.current = verticalRef.current ? e.clientY : e.clientX;
 
-        document.body.style.cursor = vertical ? 'row-resize' : 'col-resize';
+        document.body.style.cursor = verticalRef.current ? 'row-resize' : 'col-resize';
         document.body.style.userSelect = 'none';
 
-        window.addEventListener('pointermove', handlePointerMove);
-        window.addEventListener('pointerup', handlePointerUp);
-    };
+        const onMove = (ev) => {
+            const current = verticalRef.current ? ev.clientY : ev.clientX;
+            const delta = current - startRef.current;
+            startRef.current = current;
+            onResizeRef.current(delta);
+        };
 
-    const handlePointerMove = (e) => {
-        const current = vertical ? e.clientY : e.clientX;
-        const delta = current - startRef.current;
-        startRef.current = current;
-        onResize(delta);
-    };
+        const onUp = () => {
+            setIsDragging(false);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            window.removeEventListener('pointercancel', onUp);
+            moveRef.current = null;
+            upRef.current = null;
+        };
 
-    const handlePointerUp = () => {
-        setIsDragging(false);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        window.removeEventListener('pointermove', handlePointerMove);
-        window.removeEventListener('pointerup', handlePointerUp);
+        moveRef.current = onMove;
+        upRef.current = onUp;
+
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+        window.addEventListener('pointercancel', onUp);
     };
 
     return (
