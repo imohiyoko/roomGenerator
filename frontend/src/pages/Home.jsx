@@ -8,8 +8,8 @@ import { Header } from '../components/Header';
 const Home = () => {
     const navigate = useNavigate();
     const projects = useStore(state => state.projects);
-    const createProject = useStore(state => state.createProject);
-    const deleteProject = useStore(state => state.deleteProject);
+    const setProjects = useStore(state => state.setProjects);
+
     const setProjects = useStore(state => state.setProjects);
 
     const fileInputRef = useRef(null);
