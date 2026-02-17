@@ -7,12 +7,14 @@ export const useAutoSave = () => {
     const instances = useStore(state => state.instances);
     const projectDefaultColors = useStore(state => state.projectDefaultColors);
     const saveProjectData = useStore(state => state.saveProjectData);
+    const autoSaveInterval = useStore(state => state.autoSaveInterval);
 
     useEffect(() => {
         if (!currentProjectId) return;
+        const delay = autoSaveInterval || 30000;
         const timer = setTimeout(() => {
             saveProjectData();
-        }, 1000);
+        }, delay);
         return () => clearTimeout(timer);
-    }, [localAssets, instances, projectDefaultColors, currentProjectId, saveProjectData]);
+    }, [localAssets, instances, projectDefaultColors, currentProjectId, saveProjectData, autoSaveInterval]);
 };

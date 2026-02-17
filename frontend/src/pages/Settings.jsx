@@ -146,7 +146,7 @@ const Settings = () => {
                                 <input
                                     type="number"
                                     value={gridSize}
-                                    onChange={(e) => setGridSize(Number(e.target.value))}
+                                    onChange={(e) => { const v = Number(e.target.value); if (isFinite(v)) setGridSize(Math.max(5, Math.min(100, v))); }}
                                     className="border rounded px-3 py-2 w-full"
                                     min="5" max="100"
                                 />
@@ -156,7 +156,7 @@ const Settings = () => {
                                 <input
                                     type="number"
                                     value={snapInterval}
-                                    onChange={(e) => setSnapInterval(Number(e.target.value))}
+                                    onChange={(e) => { const v = Number(e.target.value); if (isFinite(v)) setSnapInterval(Math.max(1, Math.min(50, v))); }}
                                     className="border rounded px-3 py-2 w-full"
                                     min="1" max="50"
                                 />
@@ -166,7 +166,7 @@ const Settings = () => {
                                 <input
                                     type="number"
                                     value={initialZoom}
-                                    onChange={(e) => setInitialZoom(Number(e.target.value))}
+                                    onChange={(e) => { const v = Number(e.target.value); if (isFinite(v)) setInitialZoom(Math.max(0.1, Math.min(5.0, v))); }}
                                     className="border rounded px-3 py-2 w-full"
                                     step="0.1" min="0.1" max="5.0"
                                 />
@@ -184,11 +184,11 @@ const Settings = () => {
                             <input
                                 type="number"
                                 value={autoSaveInterval}
-                                onChange={(e) => setAutoSaveInterval(Number(e.target.value))}
+                                onChange={(e) => { const v = Number(e.target.value); if (isFinite(v)) setAutoSaveInterval(Math.max(5000, v)); }}
                                 className="border rounded px-3 py-2 w-full"
                                 step="1000" min="5000"
                             />
-                            <p className="text-xs text-gray-400 mt-1">※ 0を指定すると無効になります (現在の実装による)</p>
+                            <p className="text-xs text-gray-400 mt-1">※ 最小値は5000ミリ秒（5秒）です</p>
                         </div>
                     </div>
 

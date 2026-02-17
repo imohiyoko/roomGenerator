@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { API } from '../lib/api';
@@ -93,8 +93,13 @@ const Library = () => {
                                     <Icon p={Icons.Download} size={12} /> エクスポート
                                 </button>
                                 <button onClick={async () => {
-                                    await API.saveAssets(globalAssets.map(a => ({ ...a, source: undefined })));
-                                    alert('保存しました');
+                                    try {
+                                        await API.saveAssets(globalAssets.map(a => ({ ...a, source: undefined })));
+                                        alert('保存しました');
+                                    } catch (err) {
+                                        console.error(err);
+                                        alert('保存に失敗しました: ' + err);
+                                    }
                                 }} className="text-xs bg-green-50 text-green-600 px-3 py-1 rounded border border-green-200">変更を保存</button>
                             </div>
                         </div>
