@@ -32,16 +32,18 @@ export const createUISlice = (set, get) => {
         leftSidebarCollapsed: loadFromStorage('ui_leftSidebarCollapsed', false),
         rightSidebarCollapsed: loadFromStorage('ui_rightSidebarCollapsed', false),
 
-        setLeftSidebarWidth: (width) => {
-            const clamped = Math.max(200, Math.min(600, width));
+        setLeftSidebarWidth: (widthOrUpdater) => set(state => {
+            const newWidth = typeof widthOrUpdater === 'function' ? widthOrUpdater(state.leftSidebarWidth) : widthOrUpdater;
+            const clamped = Math.max(200, Math.min(600, newWidth));
             localStorage.setItem('ui_leftSidebarWidth', JSON.stringify(clamped));
-            set({ leftSidebarWidth: clamped });
-        },
-        setRightSidebarWidth: (width) => {
-            const clamped = Math.max(200, Math.min(600, width));
+            return { leftSidebarWidth: clamped };
+        }),
+        setRightSidebarWidth: (widthOrUpdater) => set(state => {
+            const newWidth = typeof widthOrUpdater === 'function' ? widthOrUpdater(state.rightSidebarWidth) : widthOrUpdater;
+            const clamped = Math.max(200, Math.min(600, newWidth));
             localStorage.setItem('ui_rightSidebarWidth', JSON.stringify(clamped));
-            set({ rightSidebarWidth: clamped });
-        },
+            return { rightSidebarWidth: clamped };
+        }),
         toggleLeftSidebar: () => set(state => {
             const newState = !state.leftSidebarCollapsed;
             localStorage.setItem('ui_leftSidebarCollapsed', JSON.stringify(newState));

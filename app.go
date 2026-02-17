@@ -784,6 +784,7 @@ func (a *App) GetSettings() (AppSettings, error) {
 
 	var settings AppSettings
 	if err := json.Unmarshal(data, &settings); err != nil {
+		a.logError("settings.json の解析に失敗しました。デフォルト設定を返します: %v", err)
 		return defaultSettings, nil
 	}
 	return settings, nil

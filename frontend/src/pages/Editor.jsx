@@ -140,7 +140,7 @@ const Editor = () => {
                             />
                             <ResizeHandle
                                 side="right"
-                                onResize={(delta) => setLeftSidebarWidth(leftSidebarWidth + delta)}
+                                onResize={(delta) => setLeftSidebarWidth(prev => prev + delta)}
                             />
                         </>
                     ) : (
@@ -203,7 +203,7 @@ const Editor = () => {
                         <>
                             <ResizeHandle
                                 side="left"
-                                onResize={(delta) => setRightSidebarWidth(rightSidebarWidth - delta)}
+                                onResize={(delta) => setRightSidebarWidth(prev => prev - delta)}
                             />
                             {mode === 'layout' ? (
                                 <LayoutProperties />
