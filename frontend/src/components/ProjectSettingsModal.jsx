@@ -4,12 +4,12 @@ import { ColorPicker } from './ColorPicker';
 import { Icon, Icons } from './Icon';
 
 export const ProjectSettingsModal = ({ onClose }) => {
-    const categoryLabels = useStore(state => state.categoryLabels);
-    const globalDefaultColors = useStore(state => state.globalDefaultColors);
-    const projectDefaultColors = useStore(state => state.projectDefaultColors);
+    const categoryLabels = useStore(state => state.categoryLabels) || {};
+    const globalDefaultColors = useStore(state => state.globalDefaultColors) || {};
+    const projectDefaultColors = useStore(state => state.projectDefaultColors) || {};
     const updateProjectDefaultColor = useStore(state => state.updateProjectDefaultColor);
     const resetProjectDefaultColors = useStore(state => state.resetProjectDefaultColors);
-    const colorPalette = useStore(state => state.colorPalette);
+    const colorPalette = useStore(state => state.colorPalette) || [];
     const addToPalette = useStore(state => state.addToPalette);
 
     const handleReset = () => {
