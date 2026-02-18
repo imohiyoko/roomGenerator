@@ -1,5 +1,5 @@
-import { deepClone, calculateAssetBounds } from '../lib/utils';
-import { BASE_SCALE } from '../lib/constants';
+import { deepClone, calculateAssetBounds } from '../lib/utils.js';
+import { BASE_SCALE } from '../lib/constants.js';
 
 // --- Logic from store.js ---
 
