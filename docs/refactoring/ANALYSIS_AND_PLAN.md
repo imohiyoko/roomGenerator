@@ -68,6 +68,7 @@ The frontend is a Single Page Application (SPA) structured around **Pages** and 
 - `src/lib/`: Utilities and API wrappers.
 
 ### Routes (`App.jsx`)
+
 | Route | Page Component | Description |
 | :--- | :--- | :--- |
 | `/` | `Home` | Project list and creation. |
