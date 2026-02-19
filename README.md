@@ -15,7 +15,7 @@ Wailsフレームワークを使用し、GoとReactで構築されています�
 
 ### 必要条件
 
-- Go 1.21 以上
+- Go 1.24 以上
 - Node.js 16 以上
 - Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`)
 
