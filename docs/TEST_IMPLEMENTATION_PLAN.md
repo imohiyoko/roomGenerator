@@ -62,6 +62,12 @@
 
 ### 注意点
 
-- CI環境ではフロントエンドのビルドが行われていない状態で `go test` が走る可能性があります。`embed` エラーを回避するため、テストファイル内でのパッケージ構成やビルドタグの使用を検討してください。
+- `app_test.go` は `package main` に属するため、`main.go` の `//go:embed all:frontend/dist` もコンパイル対象になります。
+- **現在のCIワークフロー（`.github/workflows/go.yml`）では、`go test` の前に `Build Frontend` ステップで `npm run build` を実行し `frontend/dist` を生成しているため、この問題は回避されています。**
+- ローカル環境で `go test` を実行する場合も、事前に `cd frontend && npm install && npm run build` を実行して `frontend/dist` を生成してください。
+- 将来的に、テストをより独立して実行したい場合は、以下の方法を検討してください：
+  - ビルドタグを使って `main.go` をテスト時に除外する
+  - `//go:embed` を含むコードを別ファイルに分離し、ビルドタグで制御する
+  - テスト対象のロジックを `main` パッケージから別パッケージに切り出す
 
 ---

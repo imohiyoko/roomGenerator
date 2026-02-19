@@ -6,7 +6,7 @@ Thank you for your interest in contributing! This guide will help you set up you
 
 Before you begin, ensure you have the following installed:
 
-*   **Go** (v1.21 or later) - [Download](https://go.dev/dl/)
+*   **Go** (v1.24 or later) - [Download](https://go.dev/dl/)
 *   **Node.js** (v18 or later) - [Download](https://nodejs.org/)
 *   **Wails** - The framework used for this app.
     ```bash
