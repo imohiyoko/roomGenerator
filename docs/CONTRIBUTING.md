@@ -24,7 +24,7 @@ roomGenerator/
 ## Development Workflow
 
 1.  **Prerequisites:**
-    - Go (1.18+)
+    - Go (1.24+)
     - Node.js (16+)
     - Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`)
 
