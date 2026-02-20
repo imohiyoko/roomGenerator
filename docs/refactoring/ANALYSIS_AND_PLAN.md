@@ -2,152 +2,127 @@
 
 This document provides a comprehensive overview of the `roomGenerator` codebase, detailing the current architecture, data flow, and proposed refactoring strategy. It serves as a guide for contributors to understand how different parts of the system interact.
 
-## 1. System Overview
+## 1. System Overview (URLs & Components)
 
-`roomGenerator` is a desktop application built with **Wails** (Go backend + React frontend).
+The application is structured around specific routes that map to high-level page components.
 
-- **Backend (Go):** Handles file system operations (loading/saving projects, assets, settings), data modeling, and migration logic.
-- **Frontend (React/Vite):** Provides the user interface for designing assets (furniture/shapes) and laying out rooms. State is managed via **Zustand**.
+### URL Structure
 
-### Core Technologies
-- **Backend:** Go, Wails v2
-- **Frontend:** React, Vite, Zustand, React Router DOM
-- **Data Format:** JSON (stored in `./data/`)
-
----
-
-## 2. Backend Architecture
-
-The backend logic resides mainly in `app.go` and data structures in `models.go`.
-
-### Key Files
-- `main.go`: Application entry point. Configures Wails options.
-- `app.go`: Defines the `App` struct and methods exposed to the frontend.
-- `models.go`: Defines Go structs (`Project`, `Asset`, `Entity`, `Instance`, etc.) mirroring the JSON data structure.
-
-### API Methods (Exposed to Frontend)
-These methods are callable from the frontend via `window.go.main.App.<MethodName>`.
-
-| Method | Description |
-| :--- | :--- |
-| `GetProjects()` | Returns a list of projects from `projects_index.json`. |
-| `CreateProject(name)` | Creates a new project and initializes its data file. |
-| `GetProjectData(id)` | Loads detailed project data (assets, instances) from `project_<id>.json`. **Includes migration logic.** |
-| `SaveProjectData(id, data)` | Saves project data to disk. Validates structure before saving. |
-| `GetAssets()` | Loads global assets (furniture library) from `global_assets.json`. |
-| `SaveAssets(assets)` | Saves global assets. |
-| `GetSettings() / SaveSettings()` | Manages application settings (`settings.json`). |
-| `ImportProject / ExportProject` | Handles JSON import/export of projects. |
-
-### Data Models (`models.go`)
-- **Project**: Metadata (ID, Name, UpdatedAt).
-- **ProjectData**: The root object for a project file (`LocalAssets`, `Instances`).
-- **Asset**: A reusable object (e.g., "Chair", "Room Shape"). Contains a list of `Entity` objects.
-- **Entity**: A geometric shape (Polygon, Circle, Text) or grouping within an Asset. **Note:** Historically called "shapes", now standardized to "entities".
-- **Instance**: A placement of an Asset in the layout view (includes Position `X, Y`, `Rotation`).
-
-### Data Storage
-Data is stored in the `./data/` directory (created on startup if missing).
-- `projects_index.json`: List of all projects.
-- `project_<id>.json`: Data for a specific project.
-- `global_assets.json`: Shared library of assets.
-- `settings.json`: User preferences.
-
----
-
-## 3. Frontend Architecture
-
-The frontend is a Single Page Application (SPA) structured around **Pages** and **Stores**.
-
-### Directory Structure
-- `src/App.jsx`: Main router configuration.
-- `src/pages/`: Top-level views.
-- `src/components/`: Reusable UI components.
-- `src/domain/`: Pure business logic and helper functions.
-- `src/store/`: State management (Zustand).
-- `src/lib/`: Utilities and API wrappers.
-
-### Routes (`App.jsx`)
-
-| Route | Page Component | Description |
+| URL Path | Page Component | Description |
 | :--- | :--- | :--- |
-| `/` | `Home` | Project list and creation. |
-| `/library` | `Library` | Global asset editor/manager. |
-| `/project/:id` | `Editor` | Main workspace for editing a specific project. |
-| `/settings` | `Settings` | Application settings. |
+| `/` | `Home` | Project list, create new project. |
+| `/library` | `Library` | Global asset library management. |
+| `/project/:id` | `Editor` | Main workspace for designing assets and laying out rooms. |
+| `/settings` | `Settings` | Application settings (theme, defaults). |
 
-### Key Components
-- **DesignCanvas (`components/DesignCanvas.jsx`)**:
-    - The editor for *Assets*. Users draw lines, rects, and shapes here.
-    - Handles complex interactions: Panning, Zooming, Node Editing.
-    - Logic partially extracted to `DesignCanvas.logic.js`.
-- **LayoutCanvas (`components/LayoutCanvas.jsx`)**:
-    - The editor for *Rooms*. Users place *Instances* of assets here.
-    - Handles drag-and-drop of assets from the sidebar.
-- **UnifiedSidebar (`components/UnifiedSidebar.jsx`)**:
-    - Left-hand panel for tool selection and asset browsing.
-- **DesignProperties / LayoutProperties**:
-    - Right-hand panels for editing properties of selected items.
+### Component Hierarchy (Editor Page)
 
-### State Management (`src/store/`)
-Using **Zustand** with a slice pattern.
-- `projectSlice.js`: Manages the currently loaded project data (`localAssets`, `instances`).
-- `assetSlice.js`: Manages global assets.
-- `uiSlice.js`: Manages UI state (selection, active tool, modal visibility).
-- `settingsSlice.js`: Manages app settings.
+- **`Editor`** (`src/pages/Editor.jsx`) - Main container. Handles key bindings & auto-save.
+  - **`UnifiedSidebar`** (`src/components/UnifiedSidebar.jsx`) - Tool selection & asset list.
+  - **`DesignCanvas`** (`src/components/DesignCanvas.jsx`) - **(Focus Area)** The vector editor for creating furniture/shapes.
+    - `DesignCanvasRender` - Pure functional component for rendering SVG.
+  - **`LayoutCanvas`** (`src/components/LayoutCanvas.jsx`) - The room layout editor (placing instances).
+  - **`DesignProperties`** (`src/components/DesignProperties.jsx`) - Right-hand panel for editing selected shape properties.
+  - **`LayoutProperties`** (`src/components/LayoutProperties.jsx`) - Right-hand panel for editing selected instance properties.
 
 ---
 
-## 4. Data Flow & Workflows
+## 2. Function Inventory (DesignCanvas Logic)
 
-### Project Loading
-1. **User** clicks a project in `Home`.
-2. **Frontend** navigates to `/project/:id`.
-3. `Editor` component mounts and calls `API.getProjectData(id)`.
-4. **Backend** (`App.GetProjectData`) reads `project_<id>.json`.
-    - *Migration:* If data uses legacy `shapes` key, it maps it to `entities`.
-5. **Frontend** receives normalized data and populates `useStore`.
+The core interaction logic for the `DesignCanvas` is extracted into `src/components/DesignCanvas.logic.js`. These functions handle the "Drag & Drop" state machine.
 
-### Asset Creation (Design Mode)
-1. **User** selects a tool (e.g., Rectangle) in `UnifiedSidebar`.
-2. **User** drags on `DesignCanvas`.
-3. `DesignCanvas` handles pointer events, calculating coordinates.
-4. **State Update:** `useStore.setState` is called to add a new `Entity` to the current `Asset`.
-    - `updateAssetEntities` helper in `domain/assetService.js` calculates the new Bounding Box.
-5. **Auto-Save:** `useAutoSave` hook detects state change and calls `API.saveProjectData`.
+### Interaction Initiators (`initiate*`)
+These functions are called on `onPointerDown`. They calculate the initial state and return a `dragRef` object.
 
-### Instance Placement (Layout Mode)
-1. **User** drags an Asset from `UnifiedSidebar` onto `LayoutCanvas`.
-2. `LayoutCanvas` calculates drop position (converting screen coords to room coords).
-3. **State Update:** A new `Instance` is added to `projectSlice`.
-4. **Rendering:** `LayoutCanvas` renders the `Asset` at the `Instance`'s coordinates.
+| Function | Trigger | Description |
+| :--- | :--- | :--- |
+| `initiatePanning` | Middle Mouse / Space+Drag | Starts canvas panning (viewState translation). |
+| `initiateMarquee` | Left Click on Empty Space | Starts a box selection (Marquee). Clears selection if no modifier key. |
+| `initiateResizing` | Drag on Resize Handle | Starts resizing a shape. Supports 'width', 'height', or 'both'. |
+| `initiateDraggingHandle` | Drag on Control Point (Polygon) | Starts moving a specific bezier handle of a polygon point. |
+| `initiateDraggingAngle` | Drag on Angle Handle (Arc/Pie) | Starts changing the start/end angle of an arc/sector. |
+| `initiateDraggingRotation` | Drag on Rotation Handle | Starts rotating the shape around its center. |
+| `initiateDraggingRadius` | Drag on Radius Handle | Starts changing the `rx` or `ry` of an ellipse/circle. |
+| `initiateDraggingPoint` | Drag on Vertex (Polygon) | Starts moving a specific vertex of a polygon. |
+| `initiateDraggingShape` | Drag on Shape Body | Starts moving the entire shape(s). Handles multiple selection. |
+
+### Interaction Processors (`process*`)
+These functions are called on `onPointerMove`. They take the current pointer event and `dragRef` state, and return updated data (usually a new list of entities).
+
+| Function | Input | Output | Description |
+| :--- | :--- | :--- | :--- |
+| `processPanning` | `viewState` | `viewState` | Updates the canvas offset (pan). |
+| `processMarquee` | `dragRef` | `selectedIndices` | Calculates which shapes are inside the marquee box. |
+| `processResizing` | `dragRef`, `Asset` | `Entities[]` | Calculates new width/height based on mouse delta. |
+| `processDraggingShape` | `dragRef`, `Asset` | `Entities[]` | Moves selected shapes. Handles snapping. |
+| `processDraggingPoint` | `dragRef`, `Asset` | `Entities[]` | Moves a single vertex. Updates bounding box if needed. |
+| `processDraggingHandle` | `dragRef`, `Asset` | `Entities[]` | Moves a bezier handle (control point). |
+| `processDraggingAngle` | `dragRef`, `Asset` | `Entities[]` | Updates start/end angles based on mouse angle relative to center. |
+| `processDraggingRotation` | `dragRef`, `Asset` | `Entities[]` | Updates rotation based on mouse angle delta. |
+| `processDraggingRadius` | `dragRef`, `Asset` | `Entities[]` | Updates radius (`rx`/`ry`) based on distance from center. |
 
 ---
 
-## 5. Refactoring Plan
+## 3. Data Flow & Persistence
 
-The goal is to improve maintainability, type safety, and logical separation.
+The application uses a **Local State -> Global Store -> Backend File** architecture.
 
-### Phase 1: Logic Extraction & Domain Cleanup
-- **Target:** `DesignCanvas.jsx` and `DesignCanvas.logic.js`.
-- **Action:** Extract pure geometric calculations (snapping, resize math, rotation) into `src/domain/geometryService.js` or similar.
-- **Goal:** Make React components focused purely on rendering and event handling.
+### 1. Local Interaction (60fps)
+- **Component:** `DesignCanvas`
+- **State:** `localAsset` (React `useState`)
+- **Flow:**
+  1. User drags a shape.
+  2. `handleMove` calls `processDraggingShape`.
+  3. `setLocalAsset` is called with new entity positions.
+  4. React re-renders `DesignCanvasRender` immediately.
+  - *Note:* This bypasses the global store for performance during the drag.
 
-### Phase 2: Standardization of Terminology
-- **Issue:** The codebase mixes "Shapes" (legacy) and "Entities" (new).
-- **Action:** Ensure frontend code consistently uses `entities`. The backend already handles migration, but frontend internal logic should be consistent.
-- **Refactor:** Rename `shapes` to `entities` in any remaining frontend utility functions or prop names.
+### 2. Commit to Store (On Release)
+- **Component:** `DesignCanvas`
+- **State:** `projectSlice` (Zustand)
+- **Flow:**
+  1. User releases mouse (`onPointerUp`).
+  2. `handleUp` calculates the final Bounding Box (`calculateAssetBounds`).
+  3. `setLocalAssets` (Zustand action) is called with the final asset data.
+  4. The global store is updated, notifying other components (e.g., `DesignProperties`).
 
-### Phase 3: Type Safety & Documentation
-- **Action:** Add JSDoc to all functions in `src/domain/` and `src/lib/`.
-- **Action:** Define "Shape" of state objects in `store/` documentation.
-- **Benefit:** Better IDE support and easier onboarding for new contributors.
+### 3. Persistence (Auto-Save)
+- **Component:** `Editor` (via `useAutoSave` hook)
+- **State:** `projectSlice` -> Go Backend
+- **Flow:**
+  1. `useAutoSave` subscribes to changes in `projectSlice`.
+  2. Debounces updates (e.g., 500ms).
+  3. Calls `API.saveProjectData(projectId, data)`.
+  4. **Go Backend:**
+     - Receives JSON data.
+     - Marshals into `ProjectData` struct.
+     - Writes to `data/project_<id>.json`.
 
-### Phase 4: Testing Strategy
-- **Current State:** Low test coverage.
-- **Plan:**
-    - Unit tests for `src/domain/` logic (using Vitest/Jest).
-    - E2E tests for critical flows (Project Creation, Asset Save) using Playwright.
+---
 
-## 6. Contribution Guide
-*To be added: Specific instructions for running tests and linting after refactoring.*
+## 4. Refactoring Plan
+
+Based on the analysis, the following refactoring steps are proposed to improve code quality and maintainability.
+
+### Phase 1: Separation of Concerns (DesignCanvas)
+The `DesignCanvas.jsx` component currently handles:
+1. Event listening & dispatching.
+2. State management (`localAsset` syncing).
+3. Rendering logic (SVG generation).
+
+**Goal:** Extract event handling into a custom hook.
+- **Create:** `src/hooks/useCanvasInteraction.js`
+- **Move:** `handleDown`, `handleMove`, `handleUp`, `dragRef` logic.
+- **Benefit:** `DesignCanvas.jsx` becomes a cleaner view component.
+
+### Phase 2: Logic Consolidation
+- **Problem:** "Entities" vs "Shapes" terminology is mixed.
+- **Action:** Standardize on `Entity` / `entities` everywhere in the frontend.
+- **Action:** Move geometry helpers (e.g., `calculateAssetBounds`, `getRotatedAABB`) to a dedicated `geometryService.js` domain file, removing them from generic `utils.js`.
+
+### Phase 3: Type Definitions (JSDoc)
+- Add comprehensive JSDoc types for `Entity`, `Asset`, and `DragState` to help IDEs and contributors understand the data structures.
+
+### Phase 4: Testing
+- Add unit tests for `DesignCanvas.logic.js` (now `geometryService.js`) to verify math calculations (rotation, resizing) without needing a browser environment.
+
