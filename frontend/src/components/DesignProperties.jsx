@@ -2,9 +2,21 @@ import React from 'react';
 import { Icon, Icons } from './Icon';
 import { ColorPicker } from './ColorPicker';
 import { NumberInput } from './NumberInput';
-import { fromMM, toMM, createRectPath, createTrianglePath, deepClone, calculateAssetBounds } from '../lib/utils';
-import { updateAssetEntities } from '../domain/assetService';
+import { fromMM, toMM, createRectPath, createTrianglePath, deepClone } from '../lib/utils';
 import { useStore } from '../store';
+import {
+    updateRoot,
+    updateEntity,
+    updatePoint,
+    updateEntityPoints,
+    bulkMove,
+    bulkResize,
+    bulkColor,
+    bulkDelete,
+    normalizePosition,
+    addEntity,
+    deleteEntity
+} from '../domain/designProperties.service';
 
 export const DesignProperties = () => {
     // Select state from store
@@ -46,145 +58,62 @@ export const DesignProperties = () => {
     const selectedEntity = (entities && targetIndex !== null) ? entities[targetIndex] : null;
     const selectedPoint = (selectedEntity && selectedEntity.points && selectedPointIndex !== null) ? selectedEntity.points[selectedPointIndex] : null;
 
-    const updateRoot = (k, v) => {
+    // Helper to update local assets
+    const applyUpdate = (newAsset) => {
+        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? newAsset : a));
+    };
+
+    const handleUpdateRoot = (k, v) => {
         if (asset.source === 'global') return;
-        setLocalAssets(p => p.map(a => {
-            if (a.id !== designTargetId) return a;
-            let updates = { [k]: v };
-
-            // 種類変更時にデフォルト形状なら色も更新
-            if (k === 'type' && a.isDefaultShape && defaultColors && defaultColors[v]) {
-                const newColor = defaultColors[v];
-                updates.color = newColor;
-                updates.entities = (a.entities || []).map(s => ({ ...s, color: newColor }));
-            }
-            // 色を手動変更したらデフォルト形状フラグを下ろす
-            if (k === 'color') {
-                updates.isDefaultShape = false;
-            }
-            return { ...a, ...updates };
-        }));
+        const newAsset = updateRoot(asset, k, v, defaultColors);
+        applyUpdate(newAsset);
     };
 
-    // 単一選択用更新関数
-    const updateEntity = (k, v) => {
+    const handleUpdateEntity = (k, v) => {
         if (asset.source === 'global' || targetIndex === null) return;
-        const currentEntities = asset.entities || [];
-        const newEntities = currentEntities.map((s, i) => i === targetIndex ? { ...s, [k]: v } : s);
-        // 形状変更時はデフォルト形状フラグを下ろす
-        setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+        const newAsset = updateEntity(asset, targetIndex, k, v);
+        applyUpdate(newAsset);
     };
 
-    const updatePoint = (k, v) => {
+    const handleUpdatePoint = (k, v) => {
         if (asset.source === 'global' || targetIndex === null || selectedPointIndex === null) return;
-        const newEntities = [...(asset.entities || [])];
-        const newPts = [...newEntities[targetIndex].points];
-        const newPt = { ...newPts[selectedPointIndex], [k]: v };
-        newPts[selectedPointIndex] = newPt;
-        newEntities[targetIndex].points = newPts;
-        setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+        const newAsset = updatePoint(asset, targetIndex, selectedPointIndex, k, v);
+        applyUpdate(newAsset);
     };
 
-    // 一括操作用関数
-    const bulkUpdate = (updater) => {
-        const newEntities = (asset.entities || []).map((s, i) => {
-            if (selectedShapeIndices.includes(i)) {
-                return updater(s);
-            }
-            return s;
-        });
-        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+    const handleBulkMove = (dx, dy) => {
+        const newAsset = bulkMove(asset, selectedShapeIndices, dx, dy);
+        applyUpdate(newAsset);
     };
 
-    const bulkMove = (dx, dy) => {
-        bulkUpdate(s => {
-            let ns = { ...s, x: (s.x || 0) + dx, y: (s.y || 0) + dy };
-            if (s.cx !== undefined) ns.cx = (s.cx || 0) + dx;
-            if (s.cy !== undefined) ns.cy = (s.cy || 0) + dy;
-            if (s.points) ns.points = s.points.map(p => ({ ...p, x: p.x + dx, y: p.y + dy }));
-            return ns;
-        });
+    const handleBulkResize = (scalePercent) => {
+        const newAsset = bulkResize(asset, selectedShapeIndices, scalePercent);
+        applyUpdate(newAsset);
     };
 
-    const bulkDelete = () => {
+    const handleBulkColor = (color) => {
+        const newAsset = bulkColor(asset, selectedShapeIndices, color);
+        applyUpdate(newAsset);
+    };
+
+    const handleBulkDelete = () => {
         if (!confirm(`${selectedShapeIndices.length}個のシェイプを削除しますか？`)) return;
-        const newEntities = (asset.entities || []).filter((_, i) => !selectedShapeIndices.includes(i));
-        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+        const newAsset = bulkDelete(asset, selectedShapeIndices);
+        applyUpdate(newAsset);
         setSelectedShapeIndices([]);
     };
 
-    const bulkColor = (color) => {
-        bulkUpdate(s => ({ ...s, color }));
+    const handleNormalizePosition = () => {
+        if (asset.source === 'global') return;
+        const newAsset = normalizePosition(asset);
+        applyUpdate(newAsset);
     };
 
-    const bulkResize = (scalePercent) => {
-        const scale = scalePercent / 100;
-        if (scale <= 0) return;
-
-        // 1. グループのバウンディングボックス（左上）を計算
-        const selectedEntities = (asset.entities || []).filter((_, i) => selectedShapeIndices.includes(i));
-        const bounds = calculateAssetBounds(selectedEntities);
-        if (!bounds) return;
-
-        const groupMinX = bounds.boundX;
-        const groupMinY = bounds.boundY;
-
-        // 2. 左上基準でスケーリング (Cartesian: Bottom-Left is MinY)
-        bulkUpdate(s => {
-            let ns = { ...s };
-
-            if (s.points) {
-                ns.points = s.points.map(p => ({
-                    ...p,
-                    x: Math.round(groupMinX + (p.x - groupMinX) * scale),
-                    y: Math.round(groupMinY + (p.y - groupMinY) * scale)
-                }));
-                // width/height再計算 (Polygon用)
-                const xs = ns.points.map(p => p.x);
-                const ys = ns.points.map(p => p.y);
-                ns.w = Math.max(...xs) - Math.min(...xs);
-                ns.h = Math.max(...ys) - Math.min(...ys);
-                // x, y も更新する場合があるが、pointsメインなら再計算不要かもしれないが一応更新
-                ns.x = Math.min(...xs);
-                ns.y = Math.min(...ys);
-
-            } else if (s.type === 'ellipse' || s.type === 'arc' || s.type === 'circle') {
-                const cx = s.cx !== undefined ? s.cx : (s.x + s.w / 2);
-                const cy = s.cy !== undefined ? s.cy : (s.y + s.h / 2);
-                const rx = s.rx !== undefined ? s.rx : (s.w / 2);
-                const ry = s.ry !== undefined ? s.ry : (s.h / 2);
-
-                const newCx = groupMinX + (cx - groupMinX) * scale;
-                const newCy = groupMinY + (cy - groupMinY) * scale;
-                const newRx = rx * scale;
-                const newRy = ry * scale;
-
-                if (s.cx !== undefined) ns.cx = Math.round(newCx);
-                if (s.cy !== undefined) ns.cy = Math.round(newCy);
-                if (s.rx !== undefined) ns.rx = Math.round(newRx);
-                if (s.ry !== undefined) ns.ry = Math.round(newRy);
-                // x, y, w, h も更新
-                ns.x = Math.round(newCx - newRx);
-                ns.y = Math.round(newCy - newRy);
-                ns.w = Math.round(newRx * 2);
-                ns.h = Math.round(newRy * 2);
-
-            } else {
-                // Rect / Image / Text etc
-                // position
-                const x = s.x || 0;
-                const y = s.y || 0;
-                const newX = groupMinX + (x - groupMinX) * scale;
-                const newY = groupMinY + (y - groupMinY) * scale;
-
-                ns.x = Math.round(newX);
-                ns.y = Math.round(newY);
-                if (s.w) ns.w = Math.round(s.w * scale);
-                if (s.h) ns.h = Math.round(s.h * scale);
-            }
-
-            return ns;
-        });
+    const handleDeleteEntity = (index) => {
+        if (!confirm('削除？')) return;
+        const newAsset = deleteEntity(asset, index);
+        applyUpdate(newAsset);
+        setSelectedShapeIndices([]);
     };
 
     const fork = () => {
@@ -193,48 +122,16 @@ export const DesignProperties = () => {
         newA.id = newId;
         newA.name = asset.name + ' (コピー)';
         delete newA.source;
-        // デフォルト形状フラグを維持
         if (asset.isDefaultShape) newA.isDefaultShape = true;
-
-        // Normalize
         if (!newA.entities && newA.shapes) {
             newA.entities = newA.shapes;
             delete newA.shapes;
         }
-
         setLocalAssets(prev => [...prev, newA]);
         if (setDesignTargetId) setDesignTargetId(newId);
     };
+
     const publish = () => { if (!confirm('共通ライブラリに追加しますか？')) return; setGlobalAssets(prev => [...prev, { ...asset, id: `a-pub-${Date.now()}`, source: undefined }]); alert('追加しました'); };
-
-    // 全体を(0,0)に寄せる
-    const normalizePosition = () => {
-        if (asset.source === 'global') return;
-        const entities = asset.entities || [];
-        if (entities.length === 0) return;
-
-        const bounds = calculateAssetBounds(entities);
-        if (!bounds) return;
-
-        const minX = bounds.boundX;
-        const minY = bounds.boundY;
-
-        if (minX === 0 && minY === 0) return;
-
-        const newEntities = entities.map(s => {
-            if (s.points) return { ...s, points: s.points.map(p => ({ ...p, x: p.x - minX, y: p.y - minY })) };
-            // For Rect/Ellipse
-            let ns = { ...s };
-            if (ns.x !== undefined) ns.x -= minX;
-            if (ns.y !== undefined) ns.y -= minY;
-            if (ns.cx !== undefined) ns.cx -= minX;
-            if (ns.cy !== undefined) ns.cy -= minY;
-            return ns;
-        });
-        // Update asset with approximate new bounds (moved to 0,0)
-        // updateAssetEntities will recalculate boundX/Y, which should come out close to 0.
-        setLocalAssets(prev => prev.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
-    };
 
     if (asset.source === 'global') return (
         <div className="p-4 bg-blue-50 h-full flex flex-col items-center justify-center text-center">
@@ -249,7 +146,7 @@ export const DesignProperties = () => {
         <div className="h-full flex flex-col">
             <div className="sidebar-header">
                 <span>形状プロパティ</span>
-                <button onClick={normalizePosition} className="text-[10px] bg-orange-50 text-orange-600 px-2 py-1 rounded border border-orange-200 hover:bg-orange-100">
+                <button onClick={handleNormalizePosition} className="text-[10px] bg-orange-50 text-orange-600 px-2 py-1 rounded border border-orange-200 hover:bg-orange-100">
                     0,0に揃える
                 </button>
             </div>
@@ -259,11 +156,11 @@ export const DesignProperties = () => {
                 <div className="bg-orange-50 border border-orange-100 rounded p-2">
                     <div className="prop-row">
                         <label className="prop-label">名称</label>
-                        <input value={asset.name} onChange={e => updateRoot('name', e.target.value)} className="prop-input font-bold text-left" />
+                        <input value={asset.name} onChange={e => handleUpdateRoot('name', e.target.value)} className="prop-input font-bold text-left" />
                     </div>
                     <div className="prop-row">
                         <label className="prop-label">種類</label>
-                        <select value={asset.type} onChange={e => updateRoot('type', e.target.value)} className="prop-input text-xs">
+                        <select value={asset.type} onChange={e => handleUpdateRoot('type', e.target.value)} className="prop-input text-xs">
                             {Object.entries(categoryLabels).map(([key, label]) => (
                                 <option key={key} value={key}>{label}</option>
                             ))}
@@ -271,7 +168,7 @@ export const DesignProperties = () => {
                     </div>
                     <div className="pt-2">
                         <label className="prop-label block mb-1">全体色</label>
-                        <ColorPicker value={asset.color} onChange={c => updateRoot('color', c)} palette={palette} onAddToPalette={onAddToPalette} />
+                        <ColorPicker value={asset.color} onChange={c => handleUpdateRoot('color', c)} palette={palette} onAddToPalette={onAddToPalette} />
                     </div>
                 </div>
 
@@ -285,10 +182,10 @@ export const DesignProperties = () => {
                         <div className="prop-row">
                             <label className="prop-label">移動 (mm)</label>
                             <div className="flex gap-1">
-                                <button onClick={() => bulkMove(-100, 0)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">←</button>
-                                <button onClick={() => bulkMove(0, 100)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">↑</button> {/* Up = +Y */}
-                                <button onClick={() => bulkMove(0, -100)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">↓</button> {/* Down = -Y */}
-                                <button onClick={() => bulkMove(100, 0)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">→</button>
+                                <button onClick={() => handleBulkMove(-100, 0)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">←</button>
+                                <button onClick={() => handleBulkMove(0, 100)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">↑</button>
+                                <button onClick={() => handleBulkMove(0, -100)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">↓</button>
+                                <button onClick={() => handleBulkMove(100, 0)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50">→</button>
                             </div>
                         </div>
 
@@ -296,19 +193,19 @@ export const DesignProperties = () => {
                         <div className="prop-row">
                             <label className="prop-label">拡大縮小</label>
                             <div className="flex gap-1">
-                                <button onClick={() => bulkResize(90)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50 text-xs">90%</button>
-                                <button onClick={() => bulkResize(110)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50 text-xs">110%</button>
+                                <button onClick={() => handleBulkResize(90)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50 text-xs">90%</button>
+                                <button onClick={() => handleBulkResize(110)} className="px-2 py-1 bg-white rounded border hover:bg-gray-50 text-xs">110%</button>
                             </div>
                         </div>
 
                         {/* 一括色変更 */}
                         <div>
                             <label className="prop-label block mb-1">一括色変更</label>
-                            <ColorPicker value={asset.color} onChange={bulkColor} palette={palette} onAddToPalette={onAddToPalette} />
+                            <ColorPicker value={asset.color} onChange={handleBulkColor} palette={palette} onAddToPalette={onAddToPalette} />
                         </div>
 
                         {/* 一括削除 */}
-                        <button onClick={bulkDelete} className="w-full py-2 bg-red-500 text-white rounded text-xs hover:bg-red-600 shadow-sm mt-2">
+                        <button onClick={handleBulkDelete} className="w-full py-2 bg-red-500 text-white rounded text-xs hover:bg-red-600 shadow-sm mt-2">
                             選択したシェイプを削除
                         </button>
                         <button
@@ -323,19 +220,18 @@ export const DesignProperties = () => {
                         <div className="text-xs font-bold text-red-600 mb-2">選択頂点 (mm)</div>
                         <div className="prop-row">
                             <label className="prop-label">X</label>
-                            <NumberInput value={toMM(selectedPoint.x)} onChange={e => updatePoint('x', fromMM(Number(e.target.value)))} className="prop-input" />
+                            <NumberInput value={toMM(selectedPoint.x)} onChange={e => handleUpdatePoint('x', fromMM(Number(e.target.value)))} className="prop-input" />
                         </div>
                         <div className="prop-row">
                             <label className="prop-label">Y</label>
-                            <NumberInput value={toMM(selectedPoint.y)} onChange={e => updatePoint('y', fromMM(Number(e.target.value)))} className="prop-input" />
+                            <NumberInput value={toMM(selectedPoint.y)} onChange={e => handleUpdatePoint('y', fromMM(Number(e.target.value)))} className="prop-input" />
                         </div>
                         <div className="mt-2 pt-2 border-t">
                             <button onClick={() => {
                                 if (selectedEntity.points.length <= 3) { alert('最低3点必要です'); return; }
                                 const newPts = selectedEntity.points.filter((_, i) => i !== selectedPointIndex);
-                                const newEntities = [...(asset.entities || [])];
-                                newEntities[targetIndex].points = newPts;
-                                setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+                                const newAsset = updateEntityPoints(asset, targetIndex, newPts);
+                                applyUpdate(newAsset);
                                 setSelectedPointIndex(null);
                             }} className="w-full py-1.5 text-xs bg-red-50 border border-red-200 text-red-600 rounded hover:bg-red-100 font-bold">この頂点を削除</button>
                         </div>
@@ -345,31 +241,31 @@ export const DesignProperties = () => {
                         <div className="text-xs font-bold text-blue-600 mb-2">選択パーツ (mm)</div>
                         {selectedEntity.type !== 'polygon' && selectedEntity.type !== 'ellipse' && (
                             <>
-                                <div className="prop-row"><label className="prop-label">幅</label><NumberInput value={toMM(selectedEntity.w)} onChange={e => updateEntity('w', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">奥</label><NumberInput value={toMM(selectedEntity.h)} onChange={e => updateEntity('h', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">X</label><NumberInput value={toMM(selectedEntity.x || 0)} onChange={e => updateEntity('x', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">Y</label><NumberInput value={toMM(selectedEntity.y || 0)} onChange={e => updateEntity('y', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">幅</label><NumberInput value={toMM(selectedEntity.w)} onChange={e => handleUpdateEntity('w', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">奥</label><NumberInput value={toMM(selectedEntity.h)} onChange={e => handleUpdateEntity('h', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">X</label><NumberInput value={toMM(selectedEntity.x || 0)} onChange={e => handleUpdateEntity('x', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">Y</label><NumberInput value={toMM(selectedEntity.y || 0)} onChange={e => handleUpdateEntity('y', fromMM(Number(e.target.value)))} className="prop-input" /></div>
                             </>
                         )}
                         <div className="pt-2">
                             <label className="prop-label block mb-1">色</label>
-                            <ColorPicker value={selectedEntity.color || asset.color} onChange={c => updateEntity('color', c)} palette={palette} onAddToPalette={onAddToPalette} />
+                            <ColorPicker value={selectedEntity.color || asset.color} onChange={c => handleUpdateEntity('color', c)} palette={palette} onAddToPalette={onAddToPalette} />
                         </div>
 
                         {/* 楕円プロパティ */}
                         {selectedEntity.type === 'ellipse' && (
                             <div className="mt-3 border-t pt-2">
                                 <div className="text-[10px] font-bold text-green-600 mb-2">楕円プロパティ</div>
-                                <div className="prop-row"><label className="prop-label">中心X</label><NumberInput value={toMM(selectedEntity.cx || 0)} onChange={e => updateEntity('cx', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">中心Y</label><NumberInput value={toMM(selectedEntity.cy || 0)} onChange={e => updateEntity('cy', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">横半径</label><NumberInput value={toMM(selectedEntity.rx || 50)} onChange={e => updateEntity('rx', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">縦半径</label><NumberInput value={toMM(selectedEntity.ry || 50)} onChange={e => updateEntity('ry', fromMM(Number(e.target.value)))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">回転°</label><NumberInput value={selectedEntity.rotation || 0} onChange={e => updateEntity('rotation', Number(e.target.value))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">開始角°</label><NumberInput value={selectedEntity.startAngle || 0} onChange={e => updateEntity('startAngle', Number(e.target.value))} className="prop-input" /></div>
-                                <div className="prop-row"><label className="prop-label">終了角°</label><NumberInput value={selectedEntity.endAngle || 360} onChange={e => updateEntity('endAngle', Number(e.target.value))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">中心X</label><NumberInput value={toMM(selectedEntity.cx || 0)} onChange={e => handleUpdateEntity('cx', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">中心Y</label><NumberInput value={toMM(selectedEntity.cy || 0)} onChange={e => handleUpdateEntity('cy', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">横半径</label><NumberInput value={toMM(selectedEntity.rx || 50)} onChange={e => handleUpdateEntity('rx', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">縦半径</label><NumberInput value={toMM(selectedEntity.ry || 50)} onChange={e => handleUpdateEntity('ry', fromMM(Number(e.target.value)))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">回転°</label><NumberInput value={selectedEntity.rotation || 0} onChange={e => handleUpdateEntity('rotation', Number(e.target.value))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">開始角°</label><NumberInput value={selectedEntity.startAngle || 0} onChange={e => handleUpdateEntity('startAngle', Number(e.target.value))} className="prop-input" /></div>
+                                <div className="prop-row"><label className="prop-label">終了角°</label><NumberInput value={selectedEntity.endAngle || 360} onChange={e => handleUpdateEntity('endAngle', Number(e.target.value))} className="prop-input" /></div>
                                 <div className="prop-row items-center">
                                     <label className="prop-label">形状</label>
-                                    <select value={selectedEntity.arcMode || 'sector'} onChange={e => updateEntity('arcMode', e.target.value)} className="prop-input text-xs">
+                                    <select value={selectedEntity.arcMode || 'sector'} onChange={e => handleUpdateEntity('arcMode', e.target.value)} className="prop-input text-xs">
                                         <option value="sector">扇形</option>
                                         <option value="chord">弓形</option>
                                     </select>
@@ -389,25 +285,18 @@ export const DesignProperties = () => {
                                                 <div className="flex items-center gap-1">
                                                     <span onClick={() => setSelectedPointIndex(idx)} className="w-5 h-5 flex items-center justify-center font-bold text-purple-400 bg-purple-100 rounded cursor-pointer text-[10px]">{idx}</span>
                                                     <NumberInput value={toMM(pt.x)} onChange={e => {
-                                                        const newPts = [...selectedEntity.points];
-                                                        newPts[idx] = { ...newPts[idx], x: fromMM(Number(e.target.value)) };
-                                                        const newEntities = [...(asset.entities || [])];
-                                                        newEntities[targetIndex].points = newPts;
-                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+                                                        const newAsset = updatePoint(asset, targetIndex, idx, 'x', fromMM(Number(e.target.value)));
+                                                        applyUpdate(newAsset);
                                                     }} className="flex-1 text-[10px] p-0.5 border rounded w-12 text-center" placeholder="X" />
                                                     <NumberInput value={toMM(pt.y)} onChange={e => {
-                                                        const newPts = [...selectedEntity.points];
-                                                        newPts[idx] = { ...newPts[idx], y: fromMM(Number(e.target.value)) };
-                                                        const newEntities = [...(asset.entities || [])];
-                                                        newEntities[targetIndex].points = newPts;
-                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+                                                        const newAsset = updatePoint(asset, targetIndex, idx, 'y', fromMM(Number(e.target.value)));
+                                                        applyUpdate(newAsset);
                                                     }} className="flex-1 text-[10px] p-0.5 border rounded w-12 text-center" placeholder="Y" />
                                                     <button onClick={() => {
                                                         if (selectedEntity.points.length <= 3) { alert('最低3点必要です'); return; }
                                                         const newPts = selectedEntity.points.filter((_, i) => i !== idx);
-                                                        const newEntities = [...(asset.entities || [])];
-                                                        newEntities[targetIndex].points = newPts;
-                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+                                                        const newAsset = updateEntityPoints(asset, targetIndex, newPts);
+                                                        applyUpdate(newAsset);
                                                         if (selectedPointIndex === idx) setSelectedPointIndex(null);
                                                     }} className="text-[10px] text-red-400 hover:text-red-600 p-0.5" title="削除">×</button>
                                                 </div>
@@ -421,9 +310,8 @@ export const DesignProperties = () => {
                                                         const nextPt = selectedEntity.points[nextIdx];
                                                         const newPt = { x: (pt.x + nextPt.x) / 2, y: (pt.y + nextPt.y) / 2, handles: [] };
                                                         const newPts = [...selectedEntity.points.slice(0, idx + 1), newPt, ...selectedEntity.points.slice(idx + 1)];
-                                                        const newEntities = [...(asset.entities || [])];
-                                                        newEntities[targetIndex].points = newPts;
-                                                        setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+                                                        const newAsset = updateEntityPoints(asset, targetIndex, newPts);
+                                                        applyUpdate(newAsset);
                                                     }} className="text-[9px] text-green-600 hover:bg-green-100 px-1.5 py-0.5 rounded border border-green-300" title="頂点を追加">
                                                         +頂点
                                                     </button>
@@ -433,14 +321,12 @@ export const DesignProperties = () => {
                                                             const handles = newPts[idx].handles || [];
                                                             const nextIdx = (idx + 1) % selectedEntity.points.length;
                                                             const nextPt = selectedEntity.points[nextIdx];
-                                                            // 新しい制御点を辺の中間に追加
-                                                            const t = (handles.length + 1) / 3; // 1つ目は1/3、2つ目は2/3の位置
+                                                            const t = (handles.length + 1) / 3;
                                                             const midX = pt.x + (nextPt.x - pt.x) * t;
                                                             const midY = pt.y + (nextPt.y - pt.y) * t - 15;
                                                             newPts[idx] = { ...newPts[idx], handles: [...handles, { x: midX, y: midY }] };
-                                                            const newEntities = [...(asset.entities || [])];
-                                                            newEntities[targetIndex].points = newPts;
-                                                            setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+                                                            const newAsset = updateEntityPoints(asset, targetIndex, newPts);
+                                                            applyUpdate(newAsset);
                                                         }} className="text-[9px] text-blue-600 hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-300" title="曲線制御点を追加">
                                                             +曲線{pt.handles?.length === 1 ? '2' : ''}
                                                         </button>
@@ -449,11 +335,10 @@ export const DesignProperties = () => {
                                                         <button onClick={() => {
                                                             const newPts = [...selectedEntity.points];
                                                             const handles = [...(newPts[idx].handles || [])];
-                                                            handles.pop(); // 最後の制御点を削除
+                                                            handles.pop();
                                                             newPts[idx] = { ...newPts[idx], handles };
-                                                            const newEntities = [...(asset.entities || [])];
-                                                            newEntities[targetIndex].points = newPts;
-                                                            setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+                                                            const newAsset = updateEntityPoints(asset, targetIndex, newPts);
+                                                            applyUpdate(newAsset);
                                                         }} className="text-[9px] text-red-500 hover:bg-red-100 px-1 py-0.5 rounded border border-red-300" title="制御点を削除">
                                                             -{pt.handles.length}曲
                                                         </button>
@@ -470,18 +355,16 @@ export const DesignProperties = () => {
                                                                     const handles = [...newPts[idx].handles];
                                                                     handles[hid] = { ...handles[hid], x: fromMM(Number(e.target.value)) };
                                                                     newPts[idx] = { ...newPts[idx], handles };
-                                                                    const newEntities = [...(asset.entities || [])];
-                                                                    newEntities[targetIndex].points = newPts;
-                                                                    setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+                                                                    const newAsset = updateEntityPoints(asset, targetIndex, newPts);
+                                                                    applyUpdate(newAsset);
                                                                 }} className="flex-1 text-[9px] p-0.5 border rounded w-10 text-center" placeholder="X" />
                                                                 <NumberInput value={toMM(h.y)} onChange={e => {
                                                                     const newPts = [...selectedEntity.points];
                                                                     const handles = [...newPts[idx].handles];
                                                                     handles[hid] = { ...handles[hid], y: fromMM(Number(e.target.value)) };
                                                                     newPts[idx] = { ...newPts[idx], handles };
-                                                                    const newEntities = [...(asset.entities || [])];
-                                                                    newEntities[targetIndex].points = newPts;
-                                                                    setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a));
+                                                                    const newAsset = updateEntityPoints(asset, targetIndex, newPts);
+                                                                    applyUpdate(newAsset);
                                                                 }} className="flex-1 text-[9px] p-0.5 border rounded w-10 text-center" placeholder="Y" />
                                                             </div>
                                                         ))}
@@ -503,10 +386,9 @@ export const DesignProperties = () => {
                     <div className="flex justify-between items-center mb-2">
                         <label className="text-xs font-bold text-gray-500">構成要素</label>
                         <div className="flex gap-1">
-                            {/* Create New Entities with Layer 'default' */}
-                        <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, [...(a.entities || []), { type: 'polygon', points: createRectPath(40, 40, 0, 0), color: asset.color, layer: 'default' }]) : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">□</button>
-                        <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, [...(a.entities || []), { type: 'polygon', points: createTrianglePath(40, 40, 0, 0), color: asset.color, layer: 'default' }]) : a))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">▽</button>
-                        <button onClick={() => setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, [...(a.entities || []), { type: 'ellipse', cx: 30, cy: 30, rx: 30, ry: 30, startAngle: 0, endAngle: 360, arcMode: 'sector', color: asset.color, layer: 'default' }]) : a))} className="px-1.5 py-0.5 bg-green-100 rounded hover:bg-green-200 text-[10px]" title="楕円/扇形">◔</button>
+                        <button onClick={() => applyUpdate(addEntity(asset, { type: 'polygon', points: createRectPath(40, 40, 0, 0), color: asset.color, layer: 'default' }))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">□</button>
+                        <button onClick={() => applyUpdate(addEntity(asset, { type: 'polygon', points: createTrianglePath(40, 40, 0, 0), color: asset.color, layer: 'default' }))} className="px-1.5 py-0.5 bg-gray-100 rounded hover:bg-gray-200 text-[10px]">▽</button>
+                        <button onClick={() => applyUpdate(addEntity(asset, { type: 'ellipse', cx: 30, cy: 30, rx: 30, ry: 30, startAngle: 0, endAngle: 360, arcMode: 'sector', color: asset.color, layer: 'default' }))} className="px-1.5 py-0.5 bg-green-100 rounded hover:bg-green-200 text-[10px]" title="楕円/扇形">◔</button>
                         </div>
                     </div>
                     <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-thin">
@@ -525,7 +407,7 @@ export const DesignProperties = () => {
                                 className={`flex justify-between items-center text-xs p-1 rounded border cursor-pointer ${selectedShapeIndices.includes(i) ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}
                             >
                                 <span className="font-bold text-gray-500">#{i + 1} {s.type}</span>
-                        <button onClick={(e) => { e.stopPropagation(); if (!confirm('削除？')) return; const newEntities = (asset.entities || []).filter((_, idx) => idx !== i); setLocalAssets(p => p.map(a => a.id === designTargetId ? updateAssetEntities(a, newEntities) : a)); setSelectedShapeIndices([]); }} className="text-red-400 hover:text-red-600 px-1">×</button>
+                                <button onClick={(e) => { e.stopPropagation(); handleDeleteEntity(i); }} className="text-red-400 hover:text-red-600 px-1">×</button>
                             </div>
                         ))}
                     </div>
