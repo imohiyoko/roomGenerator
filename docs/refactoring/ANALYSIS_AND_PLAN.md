@@ -1,124 +1,77 @@
-# Room Generator Refactoring Analysis & Plan
+# Room Generator (DesignCanvas) Architecture
 
-This document provides a comprehensive overview of the `roomGenerator` system, including the current architecture, data flow, and a specific refactoring strategy for the Design Canvas logic.
+## 1. Overview
+The "Room Generator" (implemented as `DesignCanvas`) is the core editor for creating and modifying assets (rooms, furniture) within the application. It allows users to draw shapes (rectangles, ellipses, polygons), manipulate them (move, resize, rotate), and edit their properties.
 
-## 1. System Overview
+## 2. System Map
 
-### URL Structure & Routing
-The application uses `HashRouter` for client-side routing (`src/App.jsx`).
+### URL & Routing
+- **Route**: `/project/:id`
+- **Container Component**: `frontend/src/pages/Editor.jsx`
+- **Key Children**:
+  - `frontend/src/components/DesignCanvas.jsx` (The main drawing area)
+  - `frontend/src/components/DesignProperties.jsx` (The property editor sidebar)
 
-| URL Pattern | Component | Description |
-|---|---|---|
-| `/` | `frontend/src/pages/Home.jsx` | Landing page listing all projects. |
-| `/library` | `frontend/src/pages/Library.jsx` | Global asset library management. |
-| `/project/:id` | `frontend/src/pages/Editor.jsx` | Main editor interface for a specific project. |
-| `/settings` | `frontend/src/pages/Settings.jsx` | Global application settings (colors, defaults). |
+### Component Hierarchy
+```
+Editor
+├── Header
+├── UnifiedSidebar (Left)
+├── DesignCanvas (Center - The "Room Generator")
+│   ├── GridRenderer (Background Grid)
+│   ├── ShapeRenderer (Entities: Rect, Ellipse, Polygon)
+│   └── HandleRenderer (Selection Handles & Controls)
+└── DesignProperties (Right - Property Inspector)
+```
 
-### Component Hierarchy (Key Components)
-The UI is composed of several major functional blocks.
+## 3. Data Flow
 
-- **`App.jsx`**: Root component handling routing and initial global data fetching.
-- **`Editor.jsx`**: The central workspace. Orchestrates:
-    - **`UnifiedSidebar.jsx`**: Left panel for selecting assets/tools.
-    - **`DesignCanvas.jsx`**: Canvas for editing individual assets (shapes, polygons).
-    - **`LayoutCanvas.jsx`**: Canvas for placing instances (rooms, furniture) into a floor plan.
-    - **`DesignProperties.jsx`**: Right panel for editing properties of selected shapes in Design Mode.
-    - **`LayoutProperties.jsx`**: Right panel for editing properties of selected instances in Layout Mode.
+### State Management
+1.  **Global Store (Zustand)**: `frontend/src/store/projectSlice.js`
+    -   `localAssets`: Array of assets currently in the project.
+    -   `designTargetId`: ID of the asset currently being edited.
+2.  **Local State (React)**: `DesignCanvas.jsx` & `useCanvasInteraction`
+    -   `localAsset`: A copy of the currently selected asset. This is used for high-frequency updates (dragging/resizing) to avoid re-rendering the entire app store on every mouse move.
+    -   `cursorMode`: Tracks the current interaction state (e.g., 'draggingShape', 'resizing').
 
-### State Management (Zustand)
-Located in `frontend/src/store/`.
+### Data Lifecycle
+1.  **Load**: When `designTargetId` changes, `DesignCanvas` finds the asset in `localAssets` (Store) and sets it to `localAsset` (Local State).
+2.  **Edit**: User interactions (drag/resize) update `localAsset` via `handleMove` (inside `useCanvasInteraction`). This triggers a re-render of the canvas only.
+3.  **Commit**: On `handleUp` (mouse release), the modified `localAsset` is committed back to the global `localAssets` store.
+4.  **Save**: The `AutoSave` hook or manual save triggers `SaveProject` in the Go backend (`app.go`), which serializes the store data to JSON.
 
-- **`projectSlice.js`**: Manages the core data model.
-    - `localAssets`: Assets specific to the current project (Blueprints).
-    - `instances`: Placed objects in the layout (References to Assets).
-- **`uiSlice.js`**: Manages UI state like sidebar width.
-- **`temporal`**: Middleware for Undo/Redo functionality.
+## 4. Source Code Structure
 
-### Backend Interface (Go)
-Located in `app.go`. Exposed via `window.go.main.App`.
+### `frontend/src/components/DesignCanvas.jsx`
+The main container. It delegates:
+-   **Interaction Logic**: To `frontend/src/hooks/useCanvasInteraction.js`.
+-   **Rendering**: To sub-components in `frontend/src/components/canvas/`.
 
-- **`GetProjectData(id)`**: Returns `ProjectData`. Handles legacy JSON migration.
-- **`SaveProjectData(id, data)`**: Validates and saves project data to JSON.
-- **`GetAssets()` / `SaveAssets()`**: Manages global asset library.
+### `frontend/src/hooks/useCanvasInteraction.js`
+Contains the logic for:
+-   `handleDown`, `handleMove`, `handleUp`: Event routing.
+-   `dragRef`: Mutable ref for tracking drag start positions.
+-   `cursorMode`: State for changing the cursor.
+-   **Dependencies**: Uses `initiate...` and `process...` functions from `DesignCanvas.logic.js` for math/state calculations.
 
----
+### `frontend/src/components/DesignCanvas.logic.js`
+Pure functions for calculating state updates.
+-   **initiate...**: Called on `pointerDown`. Returns initial drag state.
+-   **process...**: Called on `pointerMove`. Returns updated entity data.
 
-## 2. Deep Dive: Room Generator (Design Canvas)
+### `frontend/src/components/canvas/`
+-   **GridRenderer.jsx**: Renders the infinite grid and origin lines.
+-   **ShapeRenderer.jsx**: Renders the actual asset entities (Rect, Ellipse, Polygon) and the asset bounding box.
+-   **HandleRenderer.jsx**: Renders selection handles, resize controls, and rotation tools for the selected shape(s).
 
-The core "Room Generator" functionality resides in the **Design Mode** of the Editor, where users create and modify shape-based assets.
+## 5. Development Workflow
 
-*   **Primary Component:** `frontend/src/components/DesignCanvas.jsx`
-*   **Business Logic:** `frontend/src/components/DesignCanvas.logic.js`
+### Adding a New Tool
+1.  **Logic**: Add `initiateNewTool` and `processNewTool` in `DesignCanvas.logic.js`.
+2.  **Interaction**: Update `handleDown` and `handleMove` in `useCanvasInteraction.js` to handle the new mode.
+3.  **Rendering**: Update `HandleRenderer.jsx` or `ShapeRenderer.jsx` if visual feedback is needed.
 
-### Data Flow
-
-1.  **User Action:** Mouse Down/Move/Up on `DesignCanvas`.
-2.  **Event Handling:** `DesignCanvas.jsx` captures events.
-3.  **Logic Execution:** Events are delegated to pure functions in `DesignCanvas.logic.js` (e.g., `initiateDraggingShape`, `processDraggingShape`).
-4.  **State Calculation:** Logic functions return *modified copies* of asset entities.
-5.  **State Update:** `DesignCanvas.jsx` calls `updateLocalEntities` -> `setLocalAssets` (Zustand Store).
-6.  **Persistence:** `useAutoSave` hook detects store changes and syncs with Backend via `App.SaveProjectData`.
-
-### Function Inventory (`DesignCanvas.logic.js`)
-
-The logic file currently mixes **Interaction State** (cursor modes, drag start points) with **Geometric Calculations** (coordinate transformation, snapping).
-
-| Function Name | Trigger | Responsibility | Side Effects / Returns |
-| :--- | :--- | :--- | :--- |
-| `initiatePanning` | Middle Click | Sets cursor to `grabbing`. Records start pos. | Returns `dragRef` state. |
-| `initiateMarquee` | Left Click (Empty Space) | Starts selection box. Clears selection (unless Ctrl/Meta). | Returns `dragRef` state. |
-| `initiateResizing` | Left Click (Resize Handle) | Prepares shape for resizing. | Returns initial dims (`shapeW`, `shapeH`). |
-| `initiateDraggingHandle` | Left Click (Control Point) | Prepares bezier/polygon handle drag. | Returns handle index & pos. |
-| `initiateDraggingAngle` | Left Click (Arc Handle) | Prepares start/end angle change. | Returns center point (`cx`, `cy`). |
-| `initiateDraggingRotation` | Left Click (Rotate Handle) | Prepares rotation. Calculates start angle relative to center. | Returns initial rotation & start angle. |
-| `initiateDraggingRadius` | Left Click (Radius Handle) | Prepares radius change (rx/ry). | Returns initial radius values. |
-| `initiateDraggingPoint` | Left Click (Vertex) | Prepares vertex move. | Returns point index. |
-| `initiateDraggingShape` | Left Click (Shape Body) | Prepares shape move. Handles multi-selection. | Returns snapshot of *all* selected shapes. |
-| `processPanning` | Mouse Move | Calculates new view offset. | calls `setViewState`. |
-| `processMarquee` | Mouse Move | Updates selection box. | calls `setSelectedShapeIndices`. |
-| `processResizing` | Mouse Move | Calculates new width/height based on drag delta. | Returns **New Entities Array**. |
-| `processDraggingShape` | Mouse Move | Calculates new position (with snapping). | Returns **New Entities Array**. |
-| `processDraggingPoint` | Mouse Move | Updates vertex position. Recalculates Polygon Bounds. | Returns **New Entities Array**. |
-| `processDraggingHandle` | Mouse Move | Updates bezier handle position. | Returns **New Entities Array**. |
-| `processDraggingAngle` | Mouse Move | Calculates new angle based on mouse angle relative to center. | Returns **New Entities Array**. |
-| `processDraggingRotation` | Mouse Move | Calculates rotation delta. | Returns **New Entities Array**. |
-| `processDraggingRadius` | Mouse Move | Calculates new radius. Handles rotation projection. | Returns **New Entities Array**. |
-
-## 3. Identified Issues (Code Smells)
-
-1.  **Monolithic Logic File:** `DesignCanvas.logic.js` handles too many responsibilities (Selection, Transformation, Geometry).
-2.  **Prop Drilling:** `DesignCanvas.jsx` passes many props (viewState, assets, callbacks) deep into the logic functions.
-3.  **Coordinate Confusion:** Logic frequently converts between Screen, SVG, and Cartesian coordinates inline.
-4.  **Implicit State:** The `dragRef` object structure changes based on the mode, making it hard to type-check or debug.
-
-## 4. Refactoring Plan
-
-We will refactor the "Room Generator" into three distinct layers:
-
-### Layer 1: Interaction Handlers (`src/interaction/`)
-Responsible for interpreting user input (Mouse/Keyboard) into "Intent".
-*   *Example:* `DragHandler` detects a drag and emits a `Move` intent with delta `(dx, dy)`.
-
-### Layer 2: Geometry Domain (`src/domain/geometry/`)
-Pure mathematical functions. No React state, no UI logic.
-*   *Example:* `snappedPoint(pt, grid)`, `rotatePoint(pt, center, angle)`, `newBounds(rect, delta)`.
-*   *Action:* Extract logic from `process*` functions into these pure helpers.
-
-### Layer 3: Command Pattern (`src/commands/`)
-Encapsulates state changes to support Undo/Redo and cleaner updates.
-*   *Example:* `MoveShapeCommand`, `ResizeShapeCommand`.
-
-## 5. Proposed Workflow for Contributors
-
-1.  **Understand the Map:** Read this document and `docs/SYSTEM_MAP.md` to see where `DesignCanvas` fits.
-2.  **Isolate the Logic:** If adding a feature (e.g., "Scale Tool"), write the math in `src/domain/geometry/` first, covered by unit tests.
-3.  **Connect the UI:** Add the interaction handler in `DesignCanvas.jsx` (or a new hook) that calls the geometry function.
-4.  **Update State:** Use the centralized `updateAssetEntities` helper to commit changes to the Store.
-
-## 6. Execution Steps (Immediate)
-
-1.  **Extract Geometry Logic:** Move math-heavy code from `DesignCanvas.logic.js` to `frontend/src/domain/geometry.js`.
-2.  **Simplify `dragRef`:** Define a consistent shape for the drag state or use a state machine.
-3.  **Group Functions:** Organize `initiate` and `process` pairs into objects or classes (e.g., `ShapeMover`, `PointMover`).
-
-This plan will make the "Room Generator" easier to extend and less prone to regression bugs.
+### Modifying Rendering
+-   Edit the specific renderer component in `frontend/src/components/canvas/`.
+-   `ShapeRenderer` handles the "content".
+-   `HandleRenderer` handles the "UI controls" (on top of content).
