@@ -1,124 +1,123 @@
 # Room Generator Refactoring Analysis & Plan
 
-This document provides a comprehensive overview of the `roomGenerator` system, including the current architecture, data flow, and a specific refactoring strategy for the Design Canvas logic.
+This document serves as a comprehensive guide for contributors working on the "Room Generator" (Design Canvas) system. It outlines the current architecture, data flow, key functions, and the planned refactoring strategy.
 
 ## 1. System Overview
 
 ### URL Structure & Routing
-The application uses `HashRouter` for client-side routing (`src/App.jsx`).
+The application uses `HashRouter` for client-side routing.
 
 | URL Pattern | Component | Description |
 |---|---|---|
 | `/` | `frontend/src/pages/Home.jsx` | Landing page listing all projects. |
 | `/library` | `frontend/src/pages/Library.jsx` | Global asset library management. |
-| `/project/:id` | `frontend/src/pages/Editor.jsx` | Main editor interface for a specific project. |
-| `/settings` | `frontend/src/pages/Settings.jsx` | Global application settings (colors, defaults). |
+| `/project/:id` | `frontend/src/pages/Editor.jsx` | Main editor interface. |
+| `/settings` | `frontend/src/pages/Settings.jsx` | Global application settings. |
 
-### Component Hierarchy (Key Components)
-The UI is composed of several major functional blocks.
+### Component Hierarchy (Editor)
+The `Editor.jsx` component orchestrates the workspace based on the current mode (Design vs. Layout).
 
-- **`App.jsx`**: Root component handling routing and initial global data fetching.
-- **`Editor.jsx`**: The central workspace. Orchestrates:
-    - **`UnifiedSidebar.jsx`**: Left panel for selecting assets/tools.
-    - **`DesignCanvas.jsx`**: Canvas for editing individual assets (shapes, polygons).
-    - **`LayoutCanvas.jsx`**: Canvas for placing instances (rooms, furniture) into a floor plan.
-    - **`DesignProperties.jsx`**: Right panel for editing properties of selected shapes in Design Mode.
-    - **`LayoutProperties.jsx`**: Right panel for editing properties of selected instances in Layout Mode.
+- **`Editor`**
+    - **`UnifiedSidebar`**: Tool selection.
+    - **`DesignCanvas`** (in Design Mode):
+        - Renders `DesignCanvasRender`.
+        - Handles Asset creation/editing (Shapes, Polygons).
+    - **`LayoutCanvas`** (in Layout Mode):
+        - Handles Room layout (Placing Instances).
+    - **`DesignProperties`** / **`LayoutProperties`**: Right-side panel for property editing.
 
 ### State Management (Zustand)
 Located in `frontend/src/store/`.
 
-- **`projectSlice.js`**: Manages the core data model.
-    - `localAssets`: Assets specific to the current project (Blueprints).
-    - `instances`: Placed objects in the layout (References to Assets).
-- **`uiSlice.js`**: Manages UI state like sidebar width.
-- **`temporal`**: Middleware for Undo/Redo functionality.
+- **`projectSlice.js`**: Core data model.
+    - `localAssets`: Array of Asset objects (Blueprints).
+    - `instances`: Array of Instance objects (Placed in Layout).
+- **`temporal`**: Middleware for Undo/Redo.
 
 ### Backend Interface (Go)
-Located in `app.go`. Exposed via `window.go.main.App`.
+Located in `app.go`.
 
-- **`GetProjectData(id)`**: Returns `ProjectData`. Handles legacy JSON migration.
-- **`SaveProjectData(id, data)`**: Validates and saves project data to JSON.
-- **`GetAssets()` / `SaveAssets()`**: Manages global asset library.
+- **`SaveProjectData(id, data)`**: Saves `localAssets` and `instances` to JSON.
+- **`GetProjectData(id)`**: Loads project data.
 
 ---
 
-## 2. Deep Dive: Room Generator (Design Canvas)
+## 2. Design Canvas Logic (Room Generator)
 
-The core "Room Generator" functionality resides in the **Design Mode** of the Editor, where users create and modify shape-based assets.
+The `DesignCanvas` is the core component for creating assets. It handles complex interactions like dragging, resizing, and vertex editing.
 
 *   **Primary Component:** `frontend/src/components/DesignCanvas.jsx`
-*   **Business Logic:** `frontend/src/components/DesignCanvas.logic.js`
+*   **Logic Module:** `frontend/src/components/DesignCanvas.logic.js`
 
 ### Data Flow
 
-1.  **User Action:** Mouse Down/Move/Up on `DesignCanvas`.
-2.  **Event Handling:** `DesignCanvas.jsx` captures events.
-3.  **Logic Execution:** Events are delegated to pure functions in `DesignCanvas.logic.js` (e.g., `initiateDraggingShape`, `processDraggingShape`).
-4.  **State Calculation:** Logic functions return *modified copies* of asset entities.
-5.  **State Update:** `DesignCanvas.jsx` calls `updateLocalEntities` -> `setLocalAssets` (Zustand Store).
-6.  **Persistence:** `useAutoSave` hook detects store changes and syncs with Backend via `App.SaveProjectData`.
+1.  **User Action:** Mouse Down/Move/Up on Canvas.
+2.  **Event Handling:** `DesignCanvas.jsx` captures events (e.g., `onPointerMove`).
+3.  **Logic Execution:** Events are delegated to pure functions in `DesignCanvas.logic.js` (e.g., `processDraggingShape`).
+4.  **State Calculation:** Logic functions return a **new copy** of the modified entities.
+5.  **State Update:** `DesignCanvas.jsx` calls `updateLocalEntities`, which updates the React state (`localAsset`) for smooth rendering.
+6.  **Commit:** On `onPointerUp`, the changes are committed to the global Zustand store (`projectSlice`), triggering `useAutoSave`.
 
 ### Function Inventory (`DesignCanvas.logic.js`)
 
-The logic file currently mixes **Interaction State** (cursor modes, drag start points) with **Geometric Calculations** (coordinate transformation, snapping).
+| Function Pair | Responsibility | Effects |
+| :--- | :--- | :--- |
+| `initiate/processPanning` | Pans the view (translates viewState). | Updates `viewState.x/y`. |
+| `initiate/processMarquee` | Draws a selection box. | Updates `selectedShapeIndices`. |
+| `initiate/processDraggingShape` | Moves selected shapes. | Updates `x`, `y`, `cx`, `cy`, or `points`. |
+| `initiate/processResizing` | Resizes shapes (rect/circle). | Updates `w`, `h`. |
+| `initiate/processDraggingPoint` | Moves a polygon vertex. | Updates specific point in `points` array. |
+| `initiate/processDraggingHandle` | Moves a Bezier control point. | Updates `handles` of a point. |
+| `initiate/processDraggingAngle` | Changes Arc start/end angles. | Updates `startAngle`, `endAngle`. |
+| `initiate/processDraggingRotation` | Rotates a shape. | Updates `rotation`. |
+| `initiate/processDraggingRadius` | Changes Ellipse radii. | Updates `rx`, `ry`. |
 
-| Function Name | Trigger | Responsibility | Side Effects / Returns |
-| :--- | :--- | :--- | :--- |
-| `initiatePanning` | Middle Click | Sets cursor to `grabbing`. Records start pos. | Returns `dragRef` state. |
-| `initiateMarquee` | Left Click (Empty Space) | Starts selection box. Clears selection (unless Ctrl/Meta). | Returns `dragRef` state. |
-| `initiateResizing` | Left Click (Resize Handle) | Prepares shape for resizing. | Returns initial dims (`shapeW`, `shapeH`). |
-| `initiateDraggingHandle` | Left Click (Control Point) | Prepares bezier/polygon handle drag. | Returns handle index & pos. |
-| `initiateDraggingAngle` | Left Click (Arc Handle) | Prepares start/end angle change. | Returns center point (`cx`, `cy`). |
-| `initiateDraggingRotation` | Left Click (Rotate Handle) | Prepares rotation. Calculates start angle relative to center. | Returns initial rotation & start angle. |
-| `initiateDraggingRadius` | Left Click (Radius Handle) | Prepares radius change (rx/ry). | Returns initial radius values. |
-| `initiateDraggingPoint` | Left Click (Vertex) | Prepares vertex move. | Returns point index. |
-| `initiateDraggingShape` | Left Click (Shape Body) | Prepares shape move. Handles multi-selection. | Returns snapshot of *all* selected shapes. |
-| `processPanning` | Mouse Move | Calculates new view offset. | calls `setViewState`. |
-| `processMarquee` | Mouse Move | Updates selection box. | calls `setSelectedShapeIndices`. |
-| `processResizing` | Mouse Move | Calculates new width/height based on drag delta. | Returns **New Entities Array**. |
-| `processDraggingShape` | Mouse Move | Calculates new position (with snapping). | Returns **New Entities Array**. |
-| `processDraggingPoint` | Mouse Move | Updates vertex position. Recalculates Polygon Bounds. | Returns **New Entities Array**. |
-| `processDraggingHandle` | Mouse Move | Updates bezier handle position. | Returns **New Entities Array**. |
-| `processDraggingAngle` | Mouse Move | Calculates new angle based on mouse angle relative to center. | Returns **New Entities Array**. |
-| `processDraggingRotation` | Mouse Move | Calculates rotation delta. | Returns **New Entities Array**. |
-| `processDraggingRadius` | Mouse Move | Calculates new radius. Handles rotation projection. | Returns **New Entities Array**. |
+### Coordinate Systems
 
-## 3. Identified Issues (Code Smells)
+Contributors must understand the three coordinate systems used:
 
-1.  **Monolithic Logic File:** `DesignCanvas.logic.js` handles too many responsibilities (Selection, Transformation, Geometry).
-2.  **Prop Drilling:** `DesignCanvas.jsx` passes many props (viewState, assets, callbacks) deep into the logic functions.
-3.  **Coordinate Confusion:** Logic frequently converts between Screen, SVG, and Cartesian coordinates inline.
-4.  **Implicit State:** The `dragRef` object structure changes based on the mode, making it hard to type-check or debug.
+1.  **Screen Coordinates (`clientX`, `clientY`)**
+    - Origin: Top-Left of the browser window.
+    - Unit: Pixels.
+    - Used by: DOM Events (`onPointerMove`).
 
-## 4. Refactoring Plan
+2.  **SVG Coordinates (`viewBox`)**
+    - Origin: Top-Left of the canvas (usually).
+    - Y-Axis: Increases **DOWN**.
+    - Unit: Virtual Units (scaled by `viewState.scale`).
+    - Used by: Rendering logic (`<path d="...">`).
 
-We will refactor the "Room Generator" into three distinct layers:
+3.  **Cartesian Coordinates (Logical)**
+    - Origin: User-defined (usually Center or Bottom-Left logic).
+    - Y-Axis: Increases **UP** (Standard Math).
+    - Used by: Storage, Geometry Calculations.
+    - **Conversion:** `y_cartesian = -y_svg`.
 
-### Layer 1: Interaction Handlers (`src/interaction/`)
-Responsible for interpreting user input (Mouse/Keyboard) into "Intent".
-*   *Example:* `DragHandler` detects a drag and emits a `Move` intent with delta `(dx, dy)`.
+---
 
-### Layer 2: Geometry Domain (`src/domain/geometry/`)
-Pure mathematical functions. No React state, no UI logic.
-*   *Example:* `snappedPoint(pt, grid)`, `rotatePoint(pt, center, angle)`, `newBounds(rect, delta)`.
-*   *Action:* Extract logic from `process*` functions into these pure helpers.
+## 3. Refactoring Plan
 
-### Layer 3: Command Pattern (`src/commands/`)
-Encapsulates state changes to support Undo/Redo and cleaner updates.
-*   *Example:* `MoveShapeCommand`, `ResizeShapeCommand`.
+To improve maintainability and testability, we are refactoring the codebase as follows:
 
-## 5. Proposed Workflow for Contributors
+### Phase 1: Extract Geometry Domain (In Progress)
+Move pure mathematical functions from `frontend/src/lib/utils.js` and inline logic in `DesignCanvas.logic.js` to a dedicated domain layer: **`frontend/src/domain/geometry.js`**.
 
-1.  **Understand the Map:** Read this document and `docs/SYSTEM_MAP.md` to see where `DesignCanvas` fits.
-2.  **Isolate the Logic:** If adding a feature (e.g., "Scale Tool"), write the math in `src/domain/geometry/` first, covered by unit tests.
-3.  **Connect the UI:** Add the interaction handler in `DesignCanvas.jsx` (or a new hook) that calls the geometry function.
-4.  **Update State:** Use the centralized `updateAssetEntities` helper to commit changes to the Store.
+**Functions to move:**
+- `toSvgY`, `toCartesianY` (Coordinate Conversion)
+- `toSvgRotation`, `toCartesianRotation`
+- `rotatePoint`, `getRotatedAABB` (Geometry)
+- `snapValue` (New helper for grid snapping)
 
-## 6. Execution Steps (Immediate)
+### Phase 2: Refactor Interaction Logic
+Update `DesignCanvas.logic.js` to import from `domain/geometry.js`. This separates the *interaction intent* (dragging) from the *mathematical execution* (calculating new coordinates).
 
-1.  **Extract Geometry Logic:** Move math-heavy code from `DesignCanvas.logic.js` to `frontend/src/domain/geometry.js`.
-2.  **Simplify `dragRef`:** Define a consistent shape for the drag state or use a state machine.
-3.  **Group Functions:** Organize `initiate` and `process` pairs into objects or classes (e.g., `ShapeMover`, `PointMover`).
+### Phase 3: Update Components
+Ensure `DesignCanvas.jsx` and other consumers import geometry helpers from the new domain location.
 
-This plan will make the "Room Generator" easier to extend and less prone to regression bugs.
+---
+
+## 4. Contributor Guidelines
+
+1.  **Add Logic to Domain:** When adding a new geometric operation (e.g., "Scale from Center"), implement it as a pure function in `src/domain/geometry.js` first.
+2.  **Use Helpers:** Always use `toSvgY` / `toCartesianY` for coordinate conversions. Do not manually multiply by -1.
+3.  **Preserve Data:** Logic functions in `DesignCanvas.logic.js` must **never mutate** the input asset. Always return a deep clone or a new object.
