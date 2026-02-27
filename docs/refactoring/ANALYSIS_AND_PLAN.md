@@ -1,150 +1,122 @@
-# Room Generator Refactoring Analysis & Plan
+# Room Generator システム分析とリファクタリング計画
 
-This document serves as a comprehensive analysis of the "Room Generator" (Asset Editor & Room Layout) system, outlining the current architecture, data flow, key functions, and a roadmap for refactoring. It is intended for contributors to understand the system's "overall shape" and how to extend it.
+このドキュメントは、Room Generator アプリケーションの現状のシステム構造、データフロー、主要コンポーネントを整理し、将来的なリファクタリングと機能拡張のためのガイドラインを提供するものです。
 
-## 1. System Overview
+## 1. URLと画面構成
 
-The "Room Generator" is a dual-mode editor within the application:
-1.  **Design Mode**: For creating and editing individual assets (furniture, rooms, fixtures) using primitive shapes (polygons, ellipses, rectangles).
-2.  **Layout Mode**: For arranging these assets into a floor plan.
+アプリケーションは `React Router (HashRouter)` を使用しており、以下のルートが定義されています。
 
-The system is built with **React** (Frontend), **Zustand** (State Management), and **Wails (Go)** (Backend/File System).
+| URL | コンポーネント | 説明 |
+| :--- | :--- | :--- |
+| `/` | `Home` | プロジェクト一覧、新規作成、インポート機能を提供するランディングページ。 |
+| `/library` | `Library` | グローバルアセット（家具、設備など）の管理画面。アセットの追加・編集・削除が可能。 |
+| `/project/:id` | `Editor` | メインのエディタ画面。レイアウトモードとパーツ設計モードを切り替えて操作する。 |
+| `/settings` | `Settings` | アプリケーション全体の設定（グリッドサイズ、スナップ設定など）。 |
 
-## 2. Architecture Map
+## 2. コンポーネント構造 (主要部分)
 
-### 2.1 URL Structure & Routing
-The application uses `HashRouter` for navigation.
+### Editor (`frontend/src/pages/Editor.jsx`)
+エディタ画面は、サイドバー、キャンバス、プロパティパネルの3カラム構成です。
 
-| URL Pattern | Component | Description |
-|---|---|---|
-| `/` | `Home.jsx` | Landing page listing projects. |
-| `/library` | `Library.jsx` | Global asset library management. |
-| `/project/:id` | `Editor.jsx` | **The Core Editor**. Handles both Design and Layout modes. |
-| `/settings` | `Settings.jsx` | Global application settings. |
+*   **Header**: 共通ヘッダー（Undo/Redo、設定ボタン）。
+*   **Left Sidebar (`UnifiedSidebar`)**:
+    *   **Layout Mode**: アセットライブラリからのドラッグ&ドロップ、インスタンス一覧。
+    *   **Design Mode**: アセットのパーツ構成（レイヤー）、新規パーツ追加。
+*   **Canvas Area**:
+    *   **LayoutCanvas**: 部屋の配置、家具の配置を行うキャンバス。
+    *   **DesignCanvas**: 個々のアセット（家具など）の形状を編集するキャンバス。
+    *   **Ruler**: 目盛り表示。
+*   **Right Sidebar (`Properties`)**:
+    *   **LayoutProperties**: 選択されたインスタンスのプロパティ（位置、回転、サイズ）。
+    *   **DesignProperties**: 選択されたパーツ（形状）のプロパティ（頂点、サイズ、色）。
 
-### 2.2 Component Hierarchy (Editor)
-*   **`Editor.jsx`**: Main container. Manages sidebar visibility, mode switching, and keyboard shortcuts.
-    *   **`Header.jsx`**: Top bar with project title and Undo/Redo controls.
-    *   **`UnifiedSidebar.jsx`**: Left panel.
-        *   Lists local project assets (Blueprints).
-        *   Lists placed instances (in Layout Mode).
-        *   Allows dragging assets onto the canvas.
-    *   **Canvas Area**:
-        *   **`Ruler.jsx`**: Visual guides.
-        *   **`DesignCanvas.jsx`** (in Design Mode):
-            *   **`DesignCanvasRender`**: Pure component for rendering SVG elements.
-            *   Handles `onPointerDown`, `onPointerMove`, `onPointerUp` for shape manipulation.
-        *   **`LayoutCanvas.jsx`** (in Layout Mode):
-            *   Handles placement and movement of instances.
-    *   **Properties Panel** (Right Sidebar):
-        *   **`DesignProperties.jsx`**: Detailed editor for shape properties (geometry, color, points) when in Design Mode.
-        *   **`LayoutProperties.jsx`**: Editor for instance properties (position, rotation) when in Layout Mode.
+## 3. データフローと状態管理
 
-### 2.3 State Management (Zustand)
-Located in `frontend/src/store/`.
+状態管理には `Zustand` を使用しており、`frontend/src/store/index.js` で複数のスライスを結合しています。
 
-*   **`projectSlice.js`**: The single source of truth for project data.
-    *   `localAssets`: Array of `Asset` objects (definitions).
-    *   `instances`: Array of `Instance` objects (placed items).
-    *   `viewState`: Canvas viewport `{x, y, scale}`.
-    *   `mode`: 'design' or 'layout'.
-    *   `designTargetId`: ID of the asset currently being edited.
-    *   `selectedShapeIndices`: Array of indices for selected shapes in Design Mode.
-    *   `selectedIds`: Array of IDs for selected instances in Layout Mode.
+### ストアの構成 (`frontend/src/store/`)
 
-**Data Flow Pattern:**
-1.  **Read**: Components read directly from the store via hooks (e.g., `useStore(state => state.localAssets)`).
-2.  **Write**: Components dispatch actions (e.g., `setLocalAssets`).
-3.  **Persistence**: `useAutoSave` hook in `Editor.jsx` detects store changes and calls `API.SaveProjectData` (Go).
+| スライス | ファイル | 管理するデータ |
+| :--- | :--- | :--- |
+| **Project** | `projectSlice.js` | プロジェクトID、ロード/保存ロジック、デフォルトカラー。 |
+| **Asset** | `assetSlice.js` | `localAssets` (プロジェクト内)、`globalAssets` (アプリ共通)、パレット。 |
+| **Instance** | `instanceSlice.js` | `instances` (キャンバスに配置された家具や部屋の実体)。 |
+| **UI** | `uiSlice.js` | 選択状態 (`selectedIds`, `selectedShapeIndices`)、モード (`mode`)、サイドバー開閉状態。 |
+| **Settings** | `settingsSlice.js` | グリッド設定、自動保存間隔など。 |
 
-## 3. Data Models
+### データの永続化
+*   **自動保存**: `useAutoSave` フックにより、変更があった場合に `API.saveProjectData` を呼び出してバックエンドに保存。
+*   **Undo/Redo**: `zundo` (temporal middleware) を使用して履歴管理。UI状態や設定は履歴から除外。
 
-### 3.1 Asset (Blueprint)
-Defined in `models.go` (Go) and mirrored in Frontend.
-```json
-{
-  "id": "a_123",
-  "name": "Sofa",
-  "type": "furniture",
-  "w": 200, "h": 100,
-  "entities": [
-    { "type": "rect", "x": 0, "y": 0, "w": 200, "h": 100, "color": "#..." }
-  ]
-}
-```
+### バックエンド (Go/Wails)
+*   **App struct**: ファイルシステムへの読み書きを担当。
+*   **データモデル**: `models.go` に定義。
+*   **マイグレーション**: レガシーデータ（`shapes` キーなど）の読み込み時に `normalizeProjectData` で現行形式（`entities`）に変換。
 
-### 3.2 Instance (Placed Object)
-```json
-{
-  "id": "i_456",
-  "assetId": "a_123",
-  "x": 100, "y": 200,
-  "rotation": 90,
-  "locked": false
-}
-```
+## 4. 座標系と変換ロジック
 
-## 4. Key Functions & Logic Inventory
+本システムでは、SVGの描画座標系（Y-Down）と、設計上の座標系（Cartesian Y-Up）が混在しており、変換が必要です。
 
-### 4.1 Design Logic (`frontend/src/components/DesignCanvas.logic.js`)
-Contains pure functions for interaction logic.
+### 座標系
+1.  **SVG座標系 (Screen/View)**:
+    *   原点: 左上
+    *   Y軸: 下向き（正）
+    *   回転: 時計回り（正）
+    *   使用箇所: `<svg>` 描画、マウスイベント (`DesignCanvas.jsx`, `LayoutCanvas.jsx`)
 
-| Function | Purpose |
-|---|---|
-| `initiatePanning` | Starts canvas pan operation. |
-| `initiateDraggingShape` | Starts moving selected shape(s). |
-| `initiateResizing` | Starts resizing a shape (width/height/both). |
-| `processDraggingPoint` | Updates vertex positions for polygons. |
-| `processDraggingHandle` | Updates Bezier control points. |
+2.  **Cartesian座標系 (World/Model)**:
+    *   原点: 左下（概念的）または中心
+    *   Y軸: 上向き（正）
+    *   回転: 反時計回り（正）
+    *   使用箇所: 内部データ構造 (`Instance.x`, `Instance.y`, `Point.y` など)
 
-### 4.2 Geometry Utilities (`frontend/src/lib/utils.js`)
-Shared math helpers.
+### 変換関数 (`frontend/src/domain/geometry.js` に移動済み)
+*   `toSvgY(y)`: `y` -> `-y`
+*   `toCartesianY(y)`: `y` -> `-y`
+*   `toSvgRotation(deg)`: `deg` -> `-deg`
+*   `generateSvgPath`: Cartesian座標の点配列を受け取り、SVGパス文字列（`d`属性）を生成する際にY軸を反転。
 
-| Function | Purpose |
-|---|---|
-| `toSvgY(y)` | Converts Cartesian Y (Up+) to SVG Y (Down+). |
-| `toCartesianY(y)` | Inverse of above. |
-| `calculateAssetBounds` | Computes AABB for a group of entities. Critical for normalizing assets. |
-| `generateSvgPath` | Generates path data for polygons/beziers. |
+## 5. 主要な関数リスト
 
-### 4.3 Backend API (`app.go`)
-| Function | Purpose |
-|---|---|
-| `GetProjectData(id)` | Loads project JSON. Handles migration (Shapes -> Entities). |
-| `SaveProjectData(id, data)` | Saves project JSON. Validates structure. |
-| `ImportGlobalAssets` | Merges external library data. |
+### ビジネスロジック (`frontend/src/domain/`)
+*   **`loadProjectData`** (`projectService.js`):
+    *   プロジェクトデータの取得、正規化、グローバルアセットとのマージを行う。
+*   **`updateAssetEntities`** (`assetService.js`):
+    *   アセットの形状編集時に呼び出され、境界ボックス (`boundX`, `boundY`, `w`, `h`) を再計算して更新する。
+*   **`createInstance`** (`assetService.js`):
+    *   アセットをキャンバスにドロップした際、現在のビューポート中心にインスタンスを生成する。座標変換が含まれる。
+*   **`geometry.js`**:
+    *   純粋な幾何学計算、座標変換、SVGパス生成ロジックを集約。`frontend/src/lib/utils.js` から抽出された。
 
-## 5. Refactoring Roadmap
+### ユーティリティ (`frontend/src/lib/utils.js`)
+*   **`calculateAssetBounds`** (Re-exported from geometry):
+    *   アセットに含まれる全エンティティの回転後の境界ボックス（AABB）を計算し、アセット全体のサイズとオフセットを算出する。
+*   **`getRotatedAABB`** (Re-exported from geometry):
+    *   個々の形状（矩形、多角形、楕円）の回転後のAABBを計算する。楕円や円弧の計算ロジックが複雑。
+*   **`generateEllipsePath`** (Re-exported from geometry):
+    *   楕円、円弧、扇形のSVGパスを生成する。Cartesian座標（開始角・終了角）からSVGの `A` コマンドへの変換を行う。
 
-To improve maintainability and developer experience, the following refactoring steps are proposed:
+## 6. リファクタリング案
 
-### Phase 1: Logic Extraction (Consistency)
-- **Goal**: Unify the interaction patterns between `DesignCanvas` and `LayoutCanvas`.
-- **Task**: Extract dragging/panning logic from `LayoutCanvas.jsx` into a new `LayoutCanvas.logic.js` file, mirroring the structure of `DesignCanvas.logic.js`.
+### 実施済み
+1.  **幾何学ロジックの分離**:
+    *   `src/lib/utils.js` から `src/domain/geometry.js` へ純粋な計算ロジックを移動。
+    *   `utils.js` は後方互換性のために `geometry.js` の関数を再エクスポートするように変更。
 
-### Phase 2: Component Decomposition
-- **Goal**: Reduce the size of Property panels (currently >500 lines).
-- **Task**: Split `DesignProperties.jsx` into:
-    - `PropertySection.jsx` (Wrapper)
-    - `ShapeGeometryEditor.jsx` (Width/Height/X/Y)
-    - `PointEditor.jsx` (Vertex list)
-    - `StyleEditor.jsx` (Color)
+### 今後のステップ
 
-### Phase 3: Geometry Unification
-- **Goal**: Centralize coordinate transformations.
-- **Task**: Ensure all components use `toSvgY` / `toCartesianY` from `utils.js` instead of inline calculations.
+1.  **ディレクトリ構造の整理**:
+    *   `src/domain/models/`: データモデルの定義（JSDocまたはTypeScript化の前段階）。
 
-## 6. Contributor Workflow
+2.  **カスタムフックの抽出**:
+    *   `Editor.jsx` からUIロジック（サイドバー開閉など）を `useEditorLayout` などに抽出。
+    *   `DesignCanvas` のドラッグ＆ドロップロジックをさらに細分化。
 
-### Adding a New Feature
-1.  **Identify Scope**: Does it affect the *Blueprint* (Design Mode) or the *Arrangement* (Layout Mode)?
-2.  **Update Model**: If needed, update `models.go` and `models.js` (if exists).
-3.  **Update Logic**:
-    - For Design interactions: Edit `DesignCanvas.logic.js`.
-    - For Layout interactions: Edit `LayoutCanvas.jsx` (or `logic.js` after refactor).
-4.  **Update UI**: Edit the corresponding `Properties` panel.
-5.  **Verify**: Run the app (`wails dev`) and check `app.log` for backend errors.
+3.  **テストの拡充**:
+    *   特に `geometry` 関連の計算ロジック（回転、AABB計算）に対する単体テストを追加。
+    *   リファクタリング時の回帰テストとして機能させる。
 
-### Testing
-- **Backend**: Run `go test ./...` in the root.
-- **Frontend**: Currently manual verification. Ensure `console.log` is clean.
+4.  **座標変換の明確化**:
+    *   変換ロジックを `ViewTransform` クラス/モジュールとして独立させ、変換ミスを防ぐ。
+
+この計画に基づき、段階的にリファクタリングを進めることで、保守性と拡張性を向上させることができます。
