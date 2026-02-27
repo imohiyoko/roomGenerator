@@ -38,7 +38,7 @@ export const initiateMarquee = (e, setMarquee, setSelectedShapeIndices, selected
  * @param {PointerEvent} e - イベントオブジェクト
  * @param {number} shapeIndex - 対象シェイプのインデックス
  * @param {Object} currentAsset - 現在のアセットデータ
- * @param {string} resizeMode - リサイズモード ('both', 'width', 'height')
+ * @param {string} resizeMode - リサイズモード ('both', 'width'|'horizontal', 'height'|'vertical')
  * @param {Function} setSelectedShapeIndices - 選択インデックス設定関数
  * @param {Function} setSelectedPointIndex - 選択ポイントインデックス設定関数
  * @param {Function} setCursorMode - カーソルモード設定関数
