@@ -99,7 +99,7 @@ Contributors must understand the three coordinate systems used:
 
 To improve maintainability and testability, we are refactoring the codebase as follows:
 
-### Phase 1: Extract Geometry Domain (In Progress)
+### Phase 1: Extract Geometry Domain (Complete)
 Move pure mathematical functions from `frontend/src/lib/utils.js` and inline logic in `DesignCanvas.logic.js` to a dedicated domain layer: **`frontend/src/domain/geometry.js`**.
 
 **Functions to move:**

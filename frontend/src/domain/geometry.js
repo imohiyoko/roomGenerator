@@ -123,7 +123,7 @@ export const getRotatedAABB = (shape) => {
 
         const sweep = Math.abs(end - start);
         if (sweep >= 360) {
-            allExtrema.forEach(t => pointsToCheck.push(getPoint(t)));
+            allExtrema.forEach(t => { pointsToCheck.push(getPoint(t)); });
         } else {
             allExtrema.forEach(t => {
                 if (isAngleInArc(t)) {

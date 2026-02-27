@@ -39,6 +39,8 @@ const expectedMax = 5 + Math.sqrt(50);
 
 assert(Math.abs(aabb45.minX - expectedMin) < 0.0001);
 assert(Math.abs(aabb45.maxX - expectedMax) < 0.0001);
+assert(Math.abs(aabb45.minY - expectedMin) < 0.0001);
+assert(Math.abs(aabb45.maxY - expectedMax) < 0.0001);
 console.log("getRotatedAABB passed");
 
 console.log("All tests passed!");

@@ -9,6 +9,7 @@ import {
 export {
     toSvgY, toCartesianY, toSvgRotation, toCartesianRotation,
     toSvgAngle, toCartesianAngle,
+    rotatePoint,
     getRotatedAABB, calculateAssetBounds
 };
 

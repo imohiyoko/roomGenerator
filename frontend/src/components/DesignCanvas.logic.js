@@ -350,11 +350,11 @@ export const processResizing = (e, dragRefState, currentAsset, viewState, select
             newH = snapValue(newH, SNAP_UNIT);
         }
         newEntities[targetIdx] = { ...targetShape, w: Math.max(10, newW), h: Math.max(10, newH) };
-    } else if (resizeMode === 'width') {
+    } else if (resizeMode === 'width' || resizeMode === 'horizontal') {
         let newW = dragRefState.shapeW + dx;
         if (!e.shiftKey) newW = snapValue(newW, SNAP_UNIT);
         newEntities[targetIdx] = { ...targetShape, w: Math.max(10, newW) };
-    } else if (resizeMode === 'height') {
+    } else if (resizeMode === 'height' || resizeMode === 'vertical') {
         let newH = dragRefState.shapeH + dy;
         if (!e.shiftKey) newH = snapValue(newH, SNAP_UNIT);
         newEntities[targetIdx] = { ...targetShape, h: Math.max(10, newH) };
