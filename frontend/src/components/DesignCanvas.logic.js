@@ -444,7 +444,7 @@ export const processDraggingAngle = (e, dragRefState, currentAsset, selectedShap
     const angleCart = toCartesianRotation(angleSvg);
 
     const deg = (angleCart + 360) % 360;
-    const snapped = e.shiftKey ? deg : snapValue(deg, 15);
+    const snapped = e.shiftKey ? deg : (snapValue(deg, 15) % 360);
 
     const newEntities = deepClone(currentAsset.entities);
     newEntities[targetIdx][dragRefState.targetProp] = snapped;
@@ -458,7 +458,7 @@ export const processDraggingRotation = (e, dragRefState, currentAsset, selectedS
     const deltaCart = toCartesianRotation(deltaSvg);
 
     let newRot = (dragRefState.initialRotation + deltaCart + 360) % 360;
-    if (!e.shiftKey) newRot = snapValue(newRot, 15);
+    if (!e.shiftKey) newRot = snapValue(newRot, 15) % 360;
 
     const newEntities = deepClone(currentAsset.entities);
     newEntities[targetIdx].rotation = newRot;

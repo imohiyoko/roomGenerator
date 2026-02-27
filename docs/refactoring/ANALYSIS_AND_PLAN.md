@@ -118,6 +118,6 @@ Ensure `DesignCanvas.jsx` and other consumers import geometry helpers from the n
 
 ## 4. Contributor Guidelines
 
-1.  **Add Logic to Domain:** When adding a new geometric operation (e.g., "Scale from Center"), implement it as a pure function in `src/domain/geometry.js` first.
+1.  **Add Logic to Domain:** When adding a new geometric operation (e.g., "Scale from Center"), implement it as a pure function in `frontend/src/domain/geometry.js` first.
 2.  **Use Helpers:** Always use `toSvgY` / `toCartesianY` for coordinate conversions. Do not manually multiply by -1.
 3.  **Preserve Data:** Logic functions in `DesignCanvas.logic.js` must **never mutate** the input asset. Always return a deep clone or a new object.
