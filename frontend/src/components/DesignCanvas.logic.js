@@ -37,7 +37,7 @@ export const initiateMarquee = (e, setMarquee, setSelectedShapeIndices, selected
  * @param {PointerEvent} e - イベントオブジェクト
  * @param {number} shapeIndex - 対象シェイプのインデックス
  * @param {Object} currentAsset - 現在のアセットデータ
- * @param {string} resizeMode - リサイズモード ('both', 'width', 'height')
+ * @param {string} resizeMode - リサイズモード ('both', 'width'|'horizontal', 'height'|'vertical')
  * @param {Function} setSelectedShapeIndices - 選択インデックス設定関数
  * @param {Function} setSelectedPointIndex - 選択ポイントインデックス設定関数
  * @param {Function} setCursorMode - カーソルモード設定関数
@@ -349,11 +349,11 @@ export const processResizing = (e, dragRefState, currentAsset, viewState, select
             newH = Math.round(newH / SNAP_UNIT) * SNAP_UNIT;
         }
         newEntities[targetIdx] = { ...targetShape, w: Math.max(10, newW), h: Math.max(10, newH) };
-    } else if (resizeMode === 'width') {
+    } else if (resizeMode === 'width' || resizeMode === 'horizontal') {
         let newW = dragRefState.shapeW + dx;
         if (!e.shiftKey) newW = Math.round(newW / SNAP_UNIT) * SNAP_UNIT;
         newEntities[targetIdx] = { ...targetShape, w: Math.max(10, newW) };
-    } else if (resizeMode === 'height') {
+    } else if (resizeMode === 'height' || resizeMode === 'vertical') {
         let newH = dragRefState.shapeH + dy;
         if (!e.shiftKey) newH = Math.round(newH / SNAP_UNIT) * SNAP_UNIT;
         newEntities[targetIdx] = { ...targetShape, h: Math.max(10, newH) };
@@ -443,7 +443,7 @@ export const processDraggingAngle = (e, dragRefState, currentAsset, selectedShap
     const angleCart = toCartesianRotation(angleSvg);
 
     const deg = (angleCart + 360) % 360;
-    const snapped = e.shiftKey ? deg : Math.round(deg / 15) * 15;
+    const snapped = e.shiftKey ? deg : (Math.round(deg / 15) * 15) % 360;
 
     const newEntities = deepClone(currentAsset.entities);
     newEntities[targetIdx][dragRefState.targetProp] = snapped;
@@ -457,7 +457,7 @@ export const processDraggingRotation = (e, dragRefState, currentAsset, selectedS
     const deltaCart = toCartesianRotation(deltaSvg);
 
     let newRot = (dragRefState.initialRotation + deltaCart + 360) % 360;
-    if (!e.shiftKey) newRot = Math.round(newRot / 15) * 15;
+    if (!e.shiftKey) newRot = (Math.round(newRot / 15) * 15) % 360;
 
     const newEntities = deepClone(currentAsset.entities);
     newEntities[targetIdx].rotation = newRot;
