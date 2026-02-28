@@ -5,7 +5,7 @@ This document provides a comprehensive overview of the `roomGenerator` system, i
 ## 1. System Overview
 
 ### URL Structure & Routing
-The application uses `HashRouter` for client-side routing (`src/App.jsx`).
+The application uses `HashRouter` for client-side routing (`frontend/src/App.jsx`).
 
 | URL Pattern | Component | Description |
 |---|---|---|
@@ -28,18 +28,29 @@ The UI is composed of several major functional blocks.
 ### State Management (Zustand)
 Located in `frontend/src/store/`.
 
-- **`projectSlice.js`**: Manages the core data model.
-    - `localAssets`: Assets specific to the current project (Blueprints).
-    - `instances`: Placed objects in the layout (References to Assets).
-- **`uiSlice.js`**: Manages UI state like sidebar width.
-- **`temporal`**: Middleware for Undo/Redo functionality.
+- **`projectSlice.js`**: Manages project metadata and view state (`projects`, `currentProjectId`, `viewState`, `projectDefaultColors`).
+- **`assetSlice.js`**: Manages asset data (`localAssets`, `globalAssets`, `colorPalette`, `defaultColors`, `categoryLabels`).
+- **`uiSlice.js`**: Manages UI state (`mode`, `selectedIds`, `designTargetId`, `selectedShapeIndices`, `selectedPointIndex`, sidebar layout).
+- **`instanceSlice.js`**: Manages placed objects in the layout (`instances`).
+- **`settingsSlice.js`**: Manages app-level settings (`autoSaveInterval`, etc.).
+- **`temporal` (zundo)**: Middleware for Undo/Redo. Tracks `localAssets`, `instances`, `projectDefaultColors` with a 50-entry history limit.
 
 ### Backend Interface (Go)
-Located in `app.go`. Exposed via `window.go.main.App`.
+Located in `app.go`. Exposed via `window.go.main.App`. Frontend wrapper: `frontend/src/lib/api.js`.
 
-- **`GetProjectData(id)`**: Returns `ProjectData`. Handles legacy JSON migration.
-- **`SaveProjectData(id, data)`**: Validates and saves project data to JSON.
-- **`GetAssets()` / `SaveAssets()`**: Manages global asset library.
+Key methods:
+
+| Method | Description |
+|---|---|
+| `GetProjectData(id)` | Returns `ProjectData`. Handles legacy JSON migration. |
+| `SaveProjectData(id, data)` | Validates and saves project data to JSON. |
+| `GetAssets()` / `SaveAssets(assets)` | Manages global asset library. |
+| `GetProjects()` / `CreateProject(name)` / `DeleteProject(id)` | Project CRUD. |
+| `UpdateProjectName(id, name)` | Renames a project. |
+| `GetPalette()` / `SavePalette(palette)` | Color palette persistence. |
+| `GetSettings()` / `SaveSettings(settings)` | App-level settings (grid, snap, zoom, autoSave). |
+| `ExportProject(id)` / `ImportProject(name, json)` | Project import/export as JSON. |
+| `ExportGlobalAssets()` / `ImportGlobalAssets(json, mergeMode)` | Global asset import/export. |
 
 ---
 
@@ -95,23 +106,23 @@ The logic file currently mixes **Interaction State** (cursor modes, drag start p
 
 We will refactor the "Room Generator" into three distinct layers:
 
-### Layer 1: Interaction Handlers (`src/interaction/`)
+### Layer 1: Interaction Handlers (`frontend/src/interaction/`)
 Responsible for interpreting user input (Mouse/Keyboard) into "Intent".
 *   *Example:* `DragHandler` detects a drag and emits a `Move` intent with delta `(dx, dy)`.
 
-### Layer 2: Geometry Domain (`src/domain/geometry/`)
-Pure mathematical functions. No React state, no UI logic.
+### Layer 2: Geometry Domain (`frontend/src/domain/geometry/`)
+Pure mathematical functions. No React state, no UI logic. Note: `frontend/src/domain/` already exists for business logic (e.g., `AssetService`).
 *   *Example:* `snappedPoint(pt, grid)`, `rotatePoint(pt, center, angle)`, `newBounds(rect, delta)`.
 *   *Action:* Extract logic from `process*` functions into these pure helpers.
 
-### Layer 3: Command Pattern (`src/commands/`)
+### Layer 3: Command Pattern (`frontend/src/commands/`)
 Encapsulates state changes to support Undo/Redo and cleaner updates.
 *   *Example:* `MoveShapeCommand`, `ResizeShapeCommand`.
 
 ## 5. Proposed Workflow for Contributors
 
 1.  **Understand the Map:** Read this document and `docs/SYSTEM_MAP.md` to see where `DesignCanvas` fits.
-2.  **Isolate the Logic:** If adding a feature (e.g., "Scale Tool"), write the math in `src/domain/geometry/` first, covered by unit tests.
+2.  **Isolate the Logic:** If adding a feature (e.g., "Scale Tool"), write the math in `frontend/src/domain/geometry/` first, covered by unit tests.
 3.  **Connect the UI:** Add the interaction handler in `DesignCanvas.jsx` (or a new hook) that calls the geometry function.
 4.  **Update State:** Use the centralized `updateAssetEntities` helper to commit changes to the Store.
 
