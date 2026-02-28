@@ -129,7 +129,7 @@ Encapsulates state changes to support Undo/Redo and cleaner updates.
 
 ## 6. Execution Steps (Immediate)
 
-1.  **Extract Geometry Logic:** Move math-heavy code from `DesignCanvas.logic.js` to `frontend/src/domain/geometry.js`.
+1.  **Extract Geometry Logic:** Move math-heavy code from `DesignCanvas.logic.js` into modules under `frontend/src/domain/geometry/` (e.g., `points.js`, `transforms.js`, `bounds.js`).
 2.  **Simplify `dragRef`:** Define a consistent shape for the drag state or use a state machine.
 3.  **Group Functions:** Organize `initiate` and `process` pairs into objects or classes (e.g., `ShapeMover`, `PointMover`).
 
