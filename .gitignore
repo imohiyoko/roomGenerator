@@ -57,5 +57,6 @@ desktop.ini
 data/
 # ログファイル
 app.log
+vite.log
 # バイナリ名（Mac/Linux用）
 roomGenerator
