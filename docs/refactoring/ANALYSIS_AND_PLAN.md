@@ -13,14 +13,18 @@
 *   **コンポーネント:** `frontend/src/pages/Editor.jsx`
 *   **説明:** 指定されたIDのプロジェクトを読み込みます。
 
-### 2.2 コンポーネント階層
+### 2.2 コンポーネント階層 (リファクタリング後)
 「Room Generator」の機能は `DesignCanvas` コンポーネントにカプセル化されており、`Editor.jsx` の状態が `mode === 'design'` の場合に条件付きでレンダリングされます。
+
+以前のモノリシックな `DesignCanvasRender` は、役割ごとに以下のコンポーネントに分割されました。
 
 ```text
 Editor.jsx (ページ)
 ├── UnifiedSidebar (左パネル: アセットリスト)
-├── DesignCanvas (中央: SVGキャンバス)
-│   └── DesignCanvasRender (内部コンポーネント: SVG要素を描画)
+├── DesignCanvas (中央: SVGキャンバス状態管理)
+│   ├── GridRenderer (背景グリッド、軸、原点、アセットバウンディングボックス)
+│   ├── ShapeRenderer (個々のシェイプのSVG描画と回転)
+│   └── HandleRenderer (選択時のUI: リサイズ、回転、頂点ハンドル、削除ボタン)
 └── DesignProperties (右パネル: プロパティエディタ)
 ```
 
@@ -50,57 +54,46 @@ Editor.jsx (ページ)
 
 *   **`DesignCanvas` (メインコンポーネント)**
     *   ローカル状態（`localAsset`, `cursorMode`, `marquee`）を管理します。
-    *   イベントリスナー（`handleDown`, `handleMove`, `handleUp`）を設定します。
-    *   `DesignCanvas.logic.js` と統合されています。
-*   **`DesignCanvasRender` (描画コンポーネント)**
-    *   **現在の責務:** グリッド、背景、すべてのシェイプ（矩形、多角形、楕円）、選択ハンドル、リサイズハンドル、回転ハンドルを含むSVGを描画します。
-    *   **課題:** このコンポーネントはモノリシックであり、異なるシェイプタイプの表示ロジックが混在しています。
+    *   イベントリスナー（`handleDown`, `handleMove`, `handleUp`）を設定し、`DesignCanvas.logic.js` に処理を委譲します。
+    *   `GridRenderer`, `ShapeRenderer`, `HandleRenderer` を組み合わせてSVGを構築します。
 
-### 3.2 `frontend/src/components/DesignCanvas.logic.js`
+### 3.2 `frontend/src/components/canvas/` (新規ディレクトリ)
+
+*   **`GridRenderer.jsx`**
+    *   無限グリッド、軸線、原点、およびアセット全体のバウンディングボックスを描画します。
+*   **`ShapeRenderer.jsx`**
+    *   `type` (rect, circle, ellipse, polygon) に基づいて、エンティティの基本形状を描画します。
+    *   SVG空間での回転変換（`transform="rotate(...)"`）を処理します。
+*   **`HandleRenderer.jsx`**
+    *   選択されたシェイプの上にインタラクティブなUIを描画します。
+    *   リサイズハンドル（矩形、楕円）、回転ハンドル、頂点ハンドル（多角形）、および削除ボタンが含まれます。
+
+### 3.3 `frontend/src/components/DesignCanvas.logic.js`
 
 このファイルには、インタラクション状態の遷移を処理する純粋関数が含まれています。
 
 | 操作 | トリガー | 開始関数 | 処理関数 | 説明 |
 | :--- | :--- | :--- | :--- | :--- |
 | **パニング** | 中央クリック | `initiatePanning` | `processPanning` | ビューポートを移動します。 |
-| **矩形選択 (Marquee)** | 左クリック（Empty Space: シェイプがない空白領域） | `initiateMarquee` | `processMarquee` | 矩形を描画して複数のシェイプを選択します。 |
-| **リサイズ** | ハンドルをドラッグ | `initiateResizing` | `processResizing` | エッジハンドルを介してシェイプ（矩形/楕円）をリサイズします。 |
+| **矩形選択 (Marquee)** | 左クリック（空の領域） | `initiateMarquee` | `processMarquee` | 矩形を描画して複数のシェイプを選択します。 |
+| **リサイズ** | ハンドルをドラッグ | `initiateResizing` | `processResizing` | エッジハンドルを介してシェイプをリサイズします。 |
 | **シェイプ移動** | シェイプをドラッグ | `initiateDraggingShape` | `processDraggingShape` | 選択されたシェイプを移動します。スナップを処理します。 |
 | **頂点移動** | 頂点をドラッグ | `initiateDraggingPoint` | `processDraggingPoint` | 多角形の頂点を移動します。 |
-| **ハンドル移動** | 曲線のハンドルをドラッグ | `initiateDraggingHandle` | `processDraggingHandle` | ベジェ制御点（曲線用）を移動します。 |
 | **回転** | 回転ハンドルをドラッグ | `initiateDraggingRotation` | `processDraggingRotation` | シェイプを回転させます。 |
-| **角度調整** | 角度ハンドルをドラッグ | `initiateDraggingAngle` | `processDraggingAngle` | 円弧の開始/終了角度を調整します。 |
-| **半径調整** | 半径ハンドルをドラッグ | `initiateDraggingRadius` | `processDraggingRadius` | 楕円の半径（rx, ry）を調整します。 |
 
-## 4. リファクタリング戦略
+## 4. コントリビュータ向けガイド
 
-主な目標は、`DesignCanvasRender` を分解して可読性と拡張性を向上させることです。
-
-### 4.1 提案するコンポーネント構造
-
-```text
-DesignCanvas
-├── CanvasGrid (新規)
-│   └── 無限グリッドと軸線を描画します。
-├── CanvasShape (新規)
-│   └── `type` に基づいて個々のシェイプ（Rect, Polygon, Ellipse）を描画します。
-│   └── 幾何学的な変換（SVGの回転）を処理します。
-├── CanvasSelection (新規)
-│   └── シェイプの*上*に選択UIを描画します。
-│   └── リサイズハンドル、回転ハンドル、頂点ハンドルなど。
-│   └── 矩形選択（Marquee）のオーバーレイ。
-└── DesignCanvasRender (簡略化)
-    └── 上記のコンポーネントを構成します。
-```
-
-### 4.2 コントリビュータ向けワークフロー
+リファクタリングにより、描画ロジックが分離されたため、機能追加やバグ修正が容易になりました。
 
 **新しいシェイプタイプを追加する場合:**
-1.  **モデル:** `models.go` を更新します（新しいデータフィールドが必要な場合）。
-2.  **ロジック:** カスタムインタラクションハンドルが必要な場合は `DesignCanvas.logic.js` を更新します。
-3.  **描画:** `CanvasShape`（フロントエンド）に新しいタイプのケースを追加します。
-4.  **プロパティ:** `DesignProperties.jsx` にプロパティコントロールを追加します。
+1.  **モデル:** バックエンドの `models.go` を更新します（新しいデータフィールドが必要な場合）。
+2.  **ロジック:** カスタムインタラクションが必要な場合は `DesignCanvas.logic.js` に新しい処理を追加します。
+3.  **描画:** `frontend/src/components/canvas/ShapeRenderer.jsx` に新しいシェイプのレンダリングケースを追加します。
+4.  **ハンドル:** 専用の操作ハンドルが必要な場合は `frontend/src/components/canvas/HandleRenderer.jsx` にUIを追加します。
+5.  **プロパティ:** `DesignProperties.jsx` にプロパティエディタのコントロールを追加します。
 
-**表示のバグを修正する場合:**
-1.  ロジックのバグ（`DesignCanvas.logic.js` の座標が間違っているなど）か、表示のバグかを特定します。
-2.  表示のバグの場合は、`CanvasShape`（リファクタリング前は `DesignCanvasRender`）を確認してください。
+**バグの切り分けと修正:**
+1.  **表示がおかしい（色、形、位置がずれている）:** `ShapeRenderer` または `HandleRenderer` を確認してください。
+2.  **ドラッグ時の動きがおかしい、座標計算が間違っている:** `DesignCanvas.logic.js` の各種 `process...` 関数を確認してください。
+3.  **背景やグリッドがおかしい:** `GridRenderer` を確認してください。
+4.  **保存されない、またはリロードすると消える:** `DesignCanvas.jsx` の `handleUp` での `updateLocalAssetState` 呼び出し、または Zustand ストアの状態更新を確認してください。
