@@ -1,123 +1,106 @@
-# Room Generator Refactoring Analysis & Plan
+# Room Generator リファクタリング分析と計画
 
-This document serves as a comprehensive guide for contributors working on the "Room Generator" (Design Canvas) system. It outlines the current architecture, data flow, key functions, and the planned refactoring strategy.
+## 1. はじめに
 
-## 1. System Overview
+本文書は、今後のリファクタリング作業とコントリビュータへのガイドを目的とした「Room Generator（パーツ設計キャンバス）」サブシステムの詳細な分析です。複雑な描画ロジックを分離し、データフローを明確にすることで、コードの保守性を向上させることを目標としています。
 
-### URL Structure & Routing
-The application uses `HashRouter` for client-side routing.
+## 2. システム概要
 
-| URL Pattern | Component | Description |
-|---|---|---|
-| `/` | `frontend/src/pages/Home.jsx` | Landing page listing all projects. |
-| `/library` | `frontend/src/pages/Library.jsx` | Global asset library management. |
-| `/project/:id` | `frontend/src/pages/Editor.jsx` | Main editor interface. |
-| `/settings` | `frontend/src/pages/Settings.jsx` | Global application settings. |
+### 2.1 URL構造とルーティング
+アプリケーションはナビゲーションに `HashRouter` を使用しています。エディタの主要なルートは以下の通りです：
 
-### Component Hierarchy (Editor)
-The `Editor.jsx` component orchestrates the workspace based on the current mode (Design vs. Layout).
+*   **URL:** `/project/:id`
+*   **コンポーネント:** `frontend/src/pages/Editor.jsx`
+*   **説明:** 指定されたIDのプロジェクトを読み込みます。
 
-- **`Editor`**
-    - **`UnifiedSidebar`**: Tool selection.
-    - **`DesignCanvas`** (in Design Mode):
-        - Renders `DesignCanvasRender`.
-        - Handles Asset creation/editing (Shapes, Polygons).
-    - **`LayoutCanvas`** (in Layout Mode):
-        - Handles Room layout (Placing Instances).
-    - **`DesignProperties`** / **`LayoutProperties`**: Right-side panel for property editing.
+### 2.2 コンポーネント階層
+「Room Generator」の機能は `DesignCanvas` コンポーネントにカプセル化されており、`Editor.jsx` の状態が `mode === 'design'` の場合に条件付きでレンダリングされます。
 
-### State Management (Zustand)
-Located in `frontend/src/store/`.
+```text
+Editor.jsx (ページ)
+├── UnifiedSidebar (左パネル: アセットリスト)
+├── DesignCanvas (中央: SVGキャンバス)
+│   └── DesignCanvasRender (内部コンポーネント: SVG要素を描画)
+└── DesignProperties (右パネル: プロパティエディタ)
+```
 
-- **`projectSlice.js`**: Core data model.
-    - `localAssets`: Array of Asset objects (Blueprints).
-    - `instances`: Array of Instance objects (Placed in Layout).
-- **`temporal`**: Middleware for Undo/Redo.
+### 2.3 データフローと保存の仕組み
 
-### Backend Interface (Go)
-Located in `app.go`.
+バックエンド（ファイルシステム）とフロントエンド（Reactの状態）間でデータは以下のように流れます：
 
-- **`SaveProjectData(id, data)`**: Saves `localAssets` and `instances` to JSON.
-- **`GetProjectData(id)`**: Loads project data.
+1.  **読み込み (Load):**
+    *   `Editor.jsx` がマウントされ、`loadProject(id)`（Zustandのアクション）を呼び出します。
+    *   `loadProject` は `API.getProjectData(id)` を呼び出します。
+    *   バックエンド（`app.go`）は `data/project_{id}.json` を読み込み、レガシーデータをマイグレーションして `ProjectData` を返します。
+    *   ストアが `localAssets`（アセット/部屋の配列）を更新します。
 
----
+2.  **編集 (インタラクションループ):**
+    *   ユーザーが `DesignCanvas` 上でシェイプをドラッグ/リサイズします。
+    *   **操作中:** `onPointerMove` は、高パフォーマンスの描画（60fps）のために `DesignCanvas` 内のローカルなReact状態（`localAsset`）を更新します。この時点ではグローバルストアは更新されません。
+    *   **確定:** `onPointerUp` によって `updateLocalAssetState` がトリガーされ、最終的な状態がグローバルなZustandストア（`setLocalAssets`）にコミットされます。
 
-## 2. Design Canvas Logic (Room Generator)
+3.  **保存 (Save):**
+    *   `useAutoSave` フックがストアの変更を検知します。
+    *   `API.saveProjectData` を呼び出します。
+    *   バックエンド（`app.go`）がデータを `data/project_{id}.json` に保存します。
 
-The `DesignCanvas` is the core component for creating assets. It handles complex interactions like dragging, resizing, and vertex editing.
+## 3. 関数インベントリ
 
-*   **Primary Component:** `frontend/src/components/DesignCanvas.jsx`
-*   **Logic Module:** `frontend/src/components/DesignCanvas.logic.js`
+### 3.1 `frontend/src/components/DesignCanvas.jsx`
 
-### Data Flow
+*   **`DesignCanvas` (メインコンポーネント)**
+    *   ローカル状態（`localAsset`, `cursorMode`, `marquee`）を管理します。
+    *   イベントリスナー（`handleDown`, `handleMove`, `handleUp`）を設定します。
+    *   `DesignCanvas.logic.js` と統合されています。
+*   **`DesignCanvasRender` (描画コンポーネント)**
+    *   **現在の責務:** グリッド、背景、すべてのシェイプ（矩形、多角形、楕円）、選択ハンドル、リサイズハンドル、回転ハンドルを含むSVGを描画します。
+    *   **課題:** このコンポーネントはモノリシックであり、異なるシェイプタイプの表示ロジックが混在しています。
 
-1.  **User Action:** Mouse Down/Move/Up on Canvas.
-2.  **Event Handling:** `DesignCanvas.jsx` captures events (e.g., `onPointerMove`).
-3.  **Logic Execution:** Events are delegated to pure functions in `DesignCanvas.logic.js` (e.g., `processDraggingShape`).
-4.  **State Calculation:** Logic functions return a **new copy** of the modified entities.
-5.  **State Update:** `DesignCanvas.jsx` calls `updateLocalEntities`, which updates the React state (`localAsset`) for smooth rendering.
-6.  **Commit:** On `onPointerUp`, the changes are committed to the global Zustand store (`projectSlice`), triggering `useAutoSave`.
+### 3.2 `frontend/src/components/DesignCanvas.logic.js`
 
-### Function Inventory (`DesignCanvas.logic.js`)
+このファイルには、インタラクション状態の遷移を処理する純粋関数が含まれています。
 
-| Function Pair | Responsibility | Effects |
-| :--- | :--- | :--- |
-| `initiate/processPanning` | Pans the view (translates viewState). | Updates `viewState.x/y`. |
-| `initiate/processMarquee` | Draws a selection box. | Updates `selectedShapeIndices`. |
-| `initiate/processDraggingShape` | Moves selected shapes. | Updates `x`, `y`, `cx`, `cy`, or `points`. |
-| `initiate/processResizing` | Resizes shapes (rect/circle). | Updates `w`, `h`. |
-| `initiate/processDraggingPoint` | Moves a polygon vertex. | Updates specific point in `points` array. |
-| `initiate/processDraggingHandle` | Moves a Bezier control point. | Updates `handles` of a point. |
-| `initiate/processDraggingAngle` | Changes Arc start/end angles. | Updates `startAngle`, `endAngle`. |
-| `initiate/processDraggingRotation` | Rotates a shape. | Updates `rotation`. |
-| `initiate/processDraggingRadius` | Changes Ellipse radii. | Updates `rx`, `ry`. |
+| 操作 | トリガー | 開始関数 | 処理関数 | 説明 |
+| :--- | :--- | :--- | :--- | :--- |
+| **パニング** | 中央クリック | `initiatePanning` | `processPanning` | ビューポートを移動します。 |
+| **矩形選択 (Marquee)** | 左クリック（Empty Space: シェイプがない空白領域） | `initiateMarquee` | `processMarquee` | 矩形を描画して複数のシェイプを選択します。 |
+| **リサイズ** | ハンドルをドラッグ | `initiateResizing` | `processResizing` | エッジハンドルを介してシェイプ（矩形/楕円）をリサイズします。 |
+| **シェイプ移動** | シェイプをドラッグ | `initiateDraggingShape` | `processDraggingShape` | 選択されたシェイプを移動します。スナップを処理します。 |
+| **頂点移動** | 頂点をドラッグ | `initiateDraggingPoint` | `processDraggingPoint` | 多角形の頂点を移動します。 |
+| **ハンドル移動** | 曲線のハンドルをドラッグ | `initiateDraggingHandle` | `processDraggingHandle` | ベジェ制御点（曲線用）を移動します。 |
+| **回転** | 回転ハンドルをドラッグ | `initiateDraggingRotation` | `processDraggingRotation` | シェイプを回転させます。 |
+| **角度調整** | 角度ハンドルをドラッグ | `initiateDraggingAngle` | `processDraggingAngle` | 円弧の開始/終了角度を調整します。 |
+| **半径調整** | 半径ハンドルをドラッグ | `initiateDraggingRadius` | `processDraggingRadius` | 楕円の半径（rx, ry）を調整します。 |
 
-### Coordinate Systems
+## 4. リファクタリング戦略
 
-Contributors must understand the three coordinate systems used:
+主な目標は、`DesignCanvasRender` を分解して可読性と拡張性を向上させることです。
 
-1.  **Screen Coordinates (`clientX`, `clientY`)**
-    - Origin: Top-Left of the browser window.
-    - Unit: Pixels.
-    - Used by: DOM Events (`onPointerMove`).
+### 4.1 提案するコンポーネント構造
 
-2.  **SVG Coordinates (`viewBox`)**
-    - Origin: Top-Left of the canvas (usually).
-    - Y-Axis: Increases **DOWN**.
-    - Unit: Virtual Units (scaled by `viewState.scale`).
-    - Used by: Rendering logic (`<path d="...">`).
+```text
+DesignCanvas
+├── CanvasGrid (新規)
+│   └── 無限グリッドと軸線を描画します。
+├── CanvasShape (新規)
+│   └── `type` に基づいて個々のシェイプ（Rect, Polygon, Ellipse）を描画します。
+│   └── 幾何学的な変換（SVGの回転）を処理します。
+├── CanvasSelection (新規)
+│   └── シェイプの*上*に選択UIを描画します。
+│   └── リサイズハンドル、回転ハンドル、頂点ハンドルなど。
+│   └── 矩形選択（Marquee）のオーバーレイ。
+└── DesignCanvasRender (簡略化)
+    └── 上記のコンポーネントを構成します。
+```
 
-3.  **Cartesian Coordinates (Logical)**
-    - Origin: User-defined (usually Center or Bottom-Left logic).
-    - Y-Axis: Increases **UP** (Standard Math).
-    - Used by: Storage, Geometry Calculations.
-    - **Conversion:** `y_cartesian = -y_svg`.
+### 4.2 コントリビュータ向けワークフロー
 
----
+**新しいシェイプタイプを追加する場合:**
+1.  **モデル:** `models.go` を更新します（新しいデータフィールドが必要な場合）。
+2.  **ロジック:** カスタムインタラクションハンドルが必要な場合は `DesignCanvas.logic.js` を更新します。
+3.  **描画:** `CanvasShape`（フロントエンド）に新しいタイプのケースを追加します。
+4.  **プロパティ:** `DesignProperties.jsx` にプロパティコントロールを追加します。
 
-## 3. Refactoring Plan
-
-To improve maintainability and testability, we are refactoring the codebase as follows:
-
-### Phase 1: Extract Geometry Domain (Complete)
-Move pure mathematical functions from `frontend/src/lib/utils.js` and inline logic in `DesignCanvas.logic.js` to a dedicated domain layer: **`frontend/src/domain/geometry.js`**.
-
-**Functions to move:**
-- `toSvgY`, `toCartesianY` (Coordinate Conversion)
-- `toSvgRotation`, `toCartesianRotation`
-- `rotatePoint`, `getRotatedAABB` (Geometry)
-- `snapValue` (New helper for grid snapping)
-
-### Phase 2: Refactor Interaction Logic
-Update `DesignCanvas.logic.js` to import from `domain/geometry.js`. This separates the *interaction intent* (dragging) from the *mathematical execution* (calculating new coordinates).
-
-### Phase 3: Update Components
-Ensure `DesignCanvas.jsx` and other consumers import geometry helpers from the new domain location.
-
----
-
-## 4. Contributor Guidelines
-
-1.  **Add Logic to Domain:** When adding a new geometric operation (e.g., "Scale from Center"), implement it as a pure function in `frontend/src/domain/geometry.js` first.
-2.  **Use Helpers:** Always use `toSvgY` / `toCartesianY` for coordinate conversions. Do not manually multiply by -1.
-3.  **Preserve Data:** Logic functions in `DesignCanvas.logic.js` must **never mutate** the input asset. Always return a deep clone or a new object.
+**表示のバグを修正する場合:**
+1.  ロジックのバグ（`DesignCanvas.logic.js` の座標が間違っているなど）か、表示のバグかを特定します。
+2.  表示のバグの場合は、`CanvasShape`（リファクタリング前は `DesignCanvasRender`）を確認してください。
