@@ -1,6 +1,5 @@
-import { deepClone } from '../lib/utils';
+import { deepClone, toSvgY, toCartesianY, toCartesianRotation } from '../lib/utils';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
-import { toSvgY, toCartesianY, toCartesianRotation, snapValue } from '../domain/geometry';
 
 /**
  * パニング操作を開始します。
@@ -38,7 +37,7 @@ export const initiateMarquee = (e, setMarquee, setSelectedShapeIndices, selected
  * @param {PointerEvent} e - イベントオブジェクト
  * @param {number} shapeIndex - 対象シェイプのインデックス
  * @param {Object} currentAsset - 現在のアセットデータ
- * @param {string} resizeMode - リサイズモード ('both', 'width'|'horizontal', 'height'|'vertical')
+ * @param {string} resizeMode - リサイズモード ('both', 'width', 'height')
  * @param {Function} setSelectedShapeIndices - 選択インデックス設定関数
  * @param {Function} setSelectedPointIndex - 選択ポイントインデックス設定関数
  * @param {Function} setCursorMode - カーソルモード設定関数
@@ -346,17 +345,17 @@ export const processResizing = (e, dragRefState, currentAsset, viewState, select
         let newW = dragRefState.shapeW + dx;
         let newH = dragRefState.shapeH + dy;
         if (!e.shiftKey) {
-            newW = snapValue(newW, SNAP_UNIT);
-            newH = snapValue(newH, SNAP_UNIT);
+            newW = Math.round(newW / SNAP_UNIT) * SNAP_UNIT;
+            newH = Math.round(newH / SNAP_UNIT) * SNAP_UNIT;
         }
         newEntities[targetIdx] = { ...targetShape, w: Math.max(10, newW), h: Math.max(10, newH) };
-    } else if (resizeMode === 'width' || resizeMode === 'horizontal') {
+    } else if (resizeMode === 'width') {
         let newW = dragRefState.shapeW + dx;
-        if (!e.shiftKey) newW = snapValue(newW, SNAP_UNIT);
+        if (!e.shiftKey) newW = Math.round(newW / SNAP_UNIT) * SNAP_UNIT;
         newEntities[targetIdx] = { ...targetShape, w: Math.max(10, newW) };
-    } else if (resizeMode === 'height' || resizeMode === 'vertical') {
+    } else if (resizeMode === 'height') {
         let newH = dragRefState.shapeH + dy;
-        if (!e.shiftKey) newH = snapValue(newH, SNAP_UNIT);
+        if (!e.shiftKey) newH = Math.round(newH / SNAP_UNIT) * SNAP_UNIT;
         newEntities[targetIdx] = { ...targetShape, h: Math.max(10, newH) };
     }
     return newEntities;
@@ -374,8 +373,8 @@ export const processDraggingShape = (e, dragRefState, currentAsset, viewState) =
         const anchorY = dragRefState.anchorY || 0;
         const targetX = anchorX + rawDx;
         const targetY = anchorY + rawDy;
-        const snappedX = snapValue(targetX, SNAP_UNIT);
-        const snappedY = snapValue(targetY, SNAP_UNIT);
+        const snappedX = Math.round(targetX / SNAP_UNIT) * SNAP_UNIT;
+        const snappedY = Math.round(targetY / SNAP_UNIT) * SNAP_UNIT;
         moveX = snappedX - anchorX;
         moveY = snappedY - anchorY;
     }
@@ -406,8 +405,8 @@ export const processDraggingPoint = (e, dragRefState, currentAsset, viewState, s
     let nx = dragRefState.pointX + dx;
     let ny = dragRefState.pointY + dy;
     if (!e.shiftKey) {
-        nx = snapValue(nx, SNAP_UNIT);
-        ny = snapValue(ny, SNAP_UNIT);
+        nx = Math.round(nx / SNAP_UNIT) * SNAP_UNIT;
+        ny = Math.round(ny / SNAP_UNIT) * SNAP_UNIT;
     }
     pts[selectedPointIndex] = { ...pts[selectedPointIndex], x: nx, y: ny };
     newEntities[targetIdx].points = pts;
@@ -444,7 +443,7 @@ export const processDraggingAngle = (e, dragRefState, currentAsset, selectedShap
     const angleCart = toCartesianRotation(angleSvg);
 
     const deg = (angleCart + 360) % 360;
-    const snapped = e.shiftKey ? deg : (snapValue(deg, 15) % 360);
+    const snapped = e.shiftKey ? deg : Math.round(deg / 15) * 15;
 
     const newEntities = deepClone(currentAsset.entities);
     newEntities[targetIdx][dragRefState.targetProp] = snapped;
@@ -458,7 +457,7 @@ export const processDraggingRotation = (e, dragRefState, currentAsset, selectedS
     const deltaCart = toCartesianRotation(deltaSvg);
 
     let newRot = (dragRefState.initialRotation + deltaCart + 360) % 360;
-    if (!e.shiftKey) newRot = snapValue(newRot, 15) % 360;
+    if (!e.shiftKey) newRot = Math.round(newRot / 15) * 15;
 
     const newEntities = deepClone(currentAsset.entities);
     newEntities[targetIdx].rotation = newRot;
@@ -493,7 +492,7 @@ export const processDraggingRadius = (e, dragRefState, currentAsset, viewState, 
         let newRx = dragRefState.initialRx * scale;
         let newRy = dragRefState.initialRy * scale;
         if (!e.shiftKey) {
-            newRx = snapValue(newRx, SNAP_UNIT);
+            newRx = Math.round(newRx / SNAP_UNIT) * SNAP_UNIT;
             newRy = newRx * (dragRefState.initialRy / dragRefState.initialRx);
         }
         newEntities[targetIdx].rx = Math.max(1, newRx);
@@ -501,12 +500,12 @@ export const processDraggingRadius = (e, dragRefState, currentAsset, viewState, 
     } else if (prop === 'rx') {
         // 横半径: ローカルX方向の移動量を使用
         let newVal = dragRefState.initialVal + localDx;
-        if (!e.shiftKey) newVal = snapValue(newVal, SNAP_UNIT);
+        if (!e.shiftKey) newVal = Math.round(newVal / SNAP_UNIT) * SNAP_UNIT;
         newEntities[targetIdx].rx = Math.max(1, newVal);
     } else if (prop === 'ry') {
         // 縦半径: ローカルY方向の移動量を使用
         let newVal = dragRefState.initialVal + localDy;
-        if (!e.shiftKey) newVal = snapValue(newVal, SNAP_UNIT);
+        if (!e.shiftKey) newVal = Math.round(newVal / SNAP_UNIT) * SNAP_UNIT;
         newEntities[targetIdx].ry = Math.max(1, newVal);
     }
     return newEntities;

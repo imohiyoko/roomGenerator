@@ -1,20 +1,18 @@
 import { BASE_SCALE } from './constants.js';
-import {
-    toSvgY, toCartesianY, toSvgRotation, toCartesianRotation,
-    toSvgAngle, toCartesianAngle, rotatePoint,
-    getRotatedAABB, calculateAssetBounds
-} from '../domain/geometry.js';
-
-// Re-export geometry functions for backward compatibility
-export {
-    toSvgY, toCartesianY, toSvgRotation, toCartesianRotation,
-    toSvgAngle, toCartesianAngle,
-    rotatePoint,
-    getRotatedAABB, calculateAssetBounds
-};
 
 export const toMM = (val) => Math.round(val * 10);
 export const fromMM = (val) => val / 10;
+
+// Coordinate System Conversion (Cartesian Y-Up <-> SVG Y-Down)
+// SVG Origin is Top-Left (Y increases Down). Cartesian Origin is Bottom-Left (Y increases Up).
+// For rendering, we map Cartesian Y to SVG Y by flipping the sign.
+// Note: This assumes a relative transformation or centering is applied elsewhere (e.g. viewState translation).
+export const toSvgY = (y) => -y;
+export const toCartesianY = (y) => -y;
+export const toSvgRotation = (deg) => -deg;
+export const toCartesianRotation = (deg) => -deg;
+export const toSvgAngle = (deg) => -deg;
+export const toCartesianAngle = (deg) => -deg;
 
 export const deepClone = (obj) => {
     if (obj === null || typeof obj !== 'object') return obj;
@@ -115,16 +113,44 @@ export const generateEllipsePath = (shape) => {
     const rxs = rx * BASE_SCALE;
     const rys = ry * BASE_SCALE;
 
+    // Angles: In Cartesian, angle increases CCW. In SVG (with Y-down), angle increases CW.
+    // To match visual appearance: angle_svg = -angle_cartesian.
+    // However, we also need to account for the fact that 0 degrees is East in both.
+    // Let's use standard math with flipped Y.
+    // x = cx + rx * cos(theta)
+    // y_cart = cy + ry * sin(theta)
+    // y_svg = -y_cart = -cy - ry * sin(theta) = cys - rys * sin(theta)
+    // In SVG path 'A' command, the coordinate system is local.
+    // Ideally we just calculate start/end points in SVG space.
+
     // Start/End angles in Cartesian (CCW from East)
     const startRad = (startAngle * Math.PI) / 180;
     const endRad = (endAngle * Math.PI) / 180;
 
+    // Calculate start/end points in Cartesian, then convert to SVG
+    // x = cx + rx * cos(theta) (rotated by rotation)
+    // y = cy + ry * sin(theta) (rotated by rotation)
+
+    // Simplified approach: Calculate points in local unrotated space, then rotate, then translate, then flip Y.
+    // But SVG path 'A' command handles rotation.
+    // The rotation parameter in 'A' command is X-axis rotation.
+    // If we flip Y, the rotation direction effectively flips.
+    // SVG Rotation is CW. Cartesian Rotation is CCW.
+    // So svg_rotation = -cartesian_rotation.
+
     // Calculate points in SVG Space directly
-    // P_svg = (cx, -cy) + (rx * cos(-theta), ry * sin(-theta))
+    // P_svg = (cx, -cy) + (rx * cos(-theta), ry * sin(-theta))  <-- Wait, ry is radius, always positive.
     // y_svg = -y_cart = - (cy + ry * sin(theta)) = -cy - ry * sin(theta).
+    // This is equivalent to Center(cx, -cy) + Radius(rx, ry) at Angle(-theta).
+    // So we use -startAngle and -endAngle.
 
     const svgStartAngle = -startAngle;
     const svgEndAngle = -endAngle;
+
+    // Normalize angles for arc calculation
+    // Note: SVG arcs go from start to end.
+    // If we go from -0 to -360 (CW), that's the same as 0 to 360 (CW in SVG).
+    // Cartesian 0 -> 90 (CCW) becomes SVG 0 -> -90 (CCW visually, or 360->270).
 
     const startRadSvg = (svgStartAngle * Math.PI) / 180;
     const endRadSvg = (svgEndAngle * Math.PI) / 180;
@@ -141,7 +167,25 @@ export const generateEllipsePath = (shape) => {
     }
 
     // Large arc flag
+    // In SVG, large-arc-flag is 1 if angle > 180.
     const largeArc = angleDiff > 180 ? 1 : 0;
+
+    // Sweep flag
+    // Cartesian: Start -> End is CCW.
+    // SVG Angles: -Start -> -End.
+    // Example: Start=0, End=90. SVG: 0 -> -90. Delta = -90.
+    // This is a "negative" sweep in standard math, but SVG sweep-flag=0 is CCW (negative angle direction), sweep-flag=1 is CW.
+    // Wait: SVG 'A' command: sweep-flag=1 means "positive-angle direction" (Clockwise in SVG Y-down).
+    // We want to draw from Start(0) to End(90 Cartesian).
+    // In SVG coords: (r, 0) to (0, -r).
+    // To go from (r,0) to (0,-r) via the "top-right" quadrant, we are moving CCW in screen space.
+    // In SVG (Y-down), moving (1,0) -> (0,-1) is...
+    // (1,0) is Right. (0,-1) is Up.
+    // Right -> Up is CCW (Counter-Clockwise).
+    // In SVG standard, angles increase CW (Right -> Down).
+    // So we are moving in the *negative* angle direction.
+    // So sweep-flag should be 0.
+
     const sweepFlag = 0; // CCW for Cartesian positive angle direction
 
     if (arcMode === 'sector') {
@@ -159,4 +203,191 @@ export const getClientPos = (e, viewState, svgRect) => {
     // Convert SVG Y to Cartesian Y
     const y = toCartesianY(ySvg);
     return { x, y };
+};
+
+// Helper to rotate a point (px, py) around (cx, cy) by angle (degrees)
+const rotatePoint = (px, py, cx, cy, angle) => {
+    const rad = (angle * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const dx = px - cx;
+    const dy = py - cy;
+    return {
+        x: cx + dx * cos - dy * sin,
+        y: cy + dx * sin + dy * cos
+    };
+};
+
+export const getRotatedAABB = (shape) => {
+    if (!shape) return null;
+
+    // Handle Ellipse / Circle / Arc / Sector
+    if (shape.type === 'ellipse' || shape.type === 'circle' || shape.type === 'arc') {
+        const cx = shape.cx !== undefined ? shape.cx : (shape.x + shape.w / 2);
+        const cy = shape.cy !== undefined ? shape.cy : (shape.y + shape.h / 2);
+        const rx = shape.rx !== undefined ? shape.rx : (shape.w / 2);
+        const ry = shape.ry !== undefined ? shape.ry : (shape.h / 2);
+        const rotation = shape.rotation || 0;
+        const startAngle = shape.startAngle !== undefined ? shape.startAngle : 0;
+        const endAngle = shape.endAngle !== undefined ? shape.endAngle : 360;
+        const isSector = shape.arcMode === 'sector' || (shape.type === 'circle' && shape.arcMode !== 'chord');
+
+        const rotRad = (rotation * Math.PI) / 180;
+        const cosRot = Math.cos(rotRad);
+        const sinRot = Math.sin(rotRad);
+
+        const getPoint = (tDeg) => {
+            const tRad = (tDeg * Math.PI) / 180;
+            const x0 = rx * Math.cos(tRad);
+            const y0 = ry * Math.sin(tRad);
+            const xRot = x0 * cosRot - y0 * sinRot;
+            const yRot = x0 * sinRot + y0 * cosRot;
+            return { x: cx + xRot, y: cy + yRot };
+        };
+
+        let pointsToCheck = [];
+
+        pointsToCheck.push(getPoint(startAngle));
+        pointsToCheck.push(getPoint(endAngle));
+
+        if (isSector) {
+             pointsToCheck.push({ x: cx, y: cy });
+        }
+
+        const calcExtremaAngles = (isX) => {
+            let t = [];
+            if (isX) {
+                if (Math.abs(cosRot) < 1e-9) {
+                     t.push(90, 270);
+                } else {
+                    const val = -(ry * sinRot) / (rx * cosRot);
+                    const angle1 = Math.atan(val) * 180 / Math.PI;
+                    t.push(angle1, angle1 + 180);
+                }
+            } else {
+                if (Math.abs(sinRot) < 1e-9) {
+                    t.push(90, 270);
+                } else {
+                    const val = (ry * cosRot) / (rx * sinRot);
+                    const angle1 = Math.atan(val) * 180 / Math.PI;
+                    t.push(angle1, angle1 + 180);
+                }
+            }
+            return t.map(a => (a + 360) % 360);
+        };
+
+        const xExtrema = calcExtremaAngles(true);
+        const yExtrema = calcExtremaAngles(false);
+        const allExtrema = [...xExtrema, ...yExtrema];
+
+        let start = startAngle;
+        let end = endAngle;
+
+        const isAngleInArc = (angle) => {
+             const a = (angle % 360 + 360) % 360;
+             const s = (start % 360 + 360) % 360;
+             const e = (end % 360 + 360) % 360;
+             if (s <= e) {
+                 return a >= s && a <= e;
+             } else {
+                 return a >= s || a <= e;
+             }
+        };
+
+        const sweep = Math.abs(end - start);
+        if (sweep >= 360) {
+            allExtrema.forEach(t => pointsToCheck.push(getPoint(t)));
+        } else {
+            allExtrema.forEach(t => {
+                if (isAngleInArc(t)) {
+                    pointsToCheck.push(getPoint(t));
+                }
+            });
+        }
+
+        if (pointsToCheck.length === 0) return null;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        pointsToCheck.forEach(p => {
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.y > maxY) maxY = p.y;
+        });
+
+        return { minX, minY, maxX, maxY };
+    }
+
+    if (shape.points && shape.points.length > 0) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        shape.points.forEach(p => {
+            if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+            if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+        });
+        const cx = minX + (maxX - minX) / 2;
+        const cy = minY + (maxY - minY) / 2;
+
+        const rotation = shape.rotation || 0;
+
+        let rPoints = [];
+        if (rotation === 0) {
+            rPoints = shape.points;
+        } else {
+            rPoints = shape.points.map(p => rotatePoint(p.x, p.y, cx, cy, rotation));
+        }
+
+        let rMinX = Infinity, rMinY = Infinity, rMaxX = -Infinity, rMaxY = -Infinity;
+        rPoints.forEach(p => {
+            if (p.x < rMinX) rMinX = p.x; if (p.x > rMaxX) rMaxX = p.x;
+            if (p.y < rMinY) rMinY = p.y; if (p.y > rMaxY) rMaxY = p.y;
+        });
+        return { minX: rMinX, minY: rMinY, maxX: rMaxX, maxY: rMaxY };
+    }
+
+    if (shape.x !== undefined && shape.w !== undefined) {
+        const cx = shape.x + shape.w / 2;
+        const cy = shape.y + shape.h / 2;
+        const rotation = shape.rotation || 0;
+        const pts = [
+            { x: shape.x, y: shape.y },
+            { x: shape.x + shape.w, y: shape.y },
+            { x: shape.x + shape.w, y: shape.y + shape.h },
+            { x: shape.x, y: shape.y + shape.h }
+        ];
+        const rPoints = pts.map(p => rotatePoint(p.x, p.y, cx, cy, rotation));
+        let rMinX = Infinity, rMinY = Infinity, rMaxX = -Infinity, rMaxY = -Infinity;
+        rPoints.forEach(p => {
+            if (p.x < rMinX) rMinX = p.x; if (p.x > rMaxX) rMaxX = p.x;
+            if (p.y < rMinY) rMinY = p.y; if (p.y > rMaxY) rMaxY = p.y;
+        });
+        return { minX: rMinX, minY: rMinY, maxX: rMaxX, maxY: rMaxY };
+    }
+
+    return null;
+};
+
+export const calculateAssetBounds = (entities) => {
+    if (!entities || entities.length === 0) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let hasValid = false;
+
+    entities.forEach(s => {
+        const box = getRotatedAABB(s);
+        if (box) {
+            hasValid = true;
+            if (box.minX < minX) minX = box.minX;
+            if (box.maxX > maxX) maxX = box.maxX;
+            if (box.minY < minY) minY = box.minY;
+            if (box.maxY > maxY) maxY = box.maxY;
+        }
+    });
+
+    if (hasValid && minX !== Infinity) {
+        return {
+            boundX: Math.round(minX),
+            boundY: Math.round(minY),
+            w: Math.round(maxX - minX),
+            h: Math.round(maxY - minY)
+        };
+    }
+    return null;
 };

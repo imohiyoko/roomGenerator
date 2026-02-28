@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
-import { generateSvgPath, generateEllipsePath, createRectPath, deepClone } from '../lib/utils';
-import { toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, calculateAssetBounds, getRotatedAABB } from '../domain/geometry';
+import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, calculateAssetBounds, getRotatedAABB } from '../lib/utils';
 import { useStore } from '../store';
 import {
     initiatePanning, initiateMarquee, initiateResizing, initiateDraggingHandle,

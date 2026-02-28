@@ -35,15 +35,9 @@ Before you begin, ensure you have the following installed:
     ```
     The application window should open automatically.
 
-## 3. Architecture & System Map
+## 3. Project Architecture
 
-For a comprehensive overview of the system, including component hierarchy, data flow, key functions, and the refactoring roadmap, please refer to:
-
-**[docs/refactoring/ANALYSIS_AND_PLAN.md](docs/refactoring/ANALYSIS_AND_PLAN.md)**
-
-This document is the primary reference for understanding the "overall shape" of the application and should be consulted before making significant architectural changes.
-
-Existing architecture documentation can also be found in `docs/ARCHITECTURE.md`.
+Please refer to [ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed map of the file structure, backend API, and data flow.
 
 ## 4. Code Style & Patterns
 
@@ -71,11 +65,10 @@ We use **Zustand** for global state.
 
 ## 5. Adding a New Feature
 
-1.  **Identify Scope**: Consult `ANALYSIS_AND_PLAN.md` to see where your feature fits (Design vs Layout).
-2.  **Backend**: If data persistence is needed, add a method to `App` struct in `app.go`.
-3.  **Frontend API**: Update `frontend/src/lib/api.js` to wrap the new Wails method.
-4.  **Store**: Add necessary state and actions to the appropriate slice in `frontend/src/store/`.
-5.  **UI**: Create components in `frontend/src/components/` and use them in pages.
+1.  **Backend**: If data persistence is needed, add a method to `App` struct in `app.go`.
+2.  **Frontend API**: Update `frontend/src/lib/api.js` to wrap the new Wails method.
+3.  **Store**: Add necessary state and actions to the appropriate slice in `frontend/src/store/`.
+4.  **UI**: Create components in `frontend/src/components/` and use them in pages.
 
 ## 6. Troubleshooting
 
