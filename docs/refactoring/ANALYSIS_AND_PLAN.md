@@ -1,6 +1,6 @@
 # Room Generator Refactoring Analysis & Plan
 
-This document provides a comprehensive overview of the `roomGenerator` system, including the current architecture, data flow, and a specific refactoring strategy for the Design Canvas logic.
+This document serves as a comprehensive guide for contributors working on the "Room Generator" (Design Canvas) system. It outlines the current architecture, data flow, key functions, and the planned refactoring strategy.
 
 ## 1. System Overview
 
@@ -11,19 +11,20 @@ The application uses `HashRouter` for client-side routing (`frontend/src/App.jsx
 |---|---|---|
 | `/` | `frontend/src/pages/Home.jsx` | Landing page listing all projects. |
 | `/library` | `frontend/src/pages/Library.jsx` | Global asset library management. |
-| `/project/:id` | `frontend/src/pages/Editor.jsx` | Main editor interface for a specific project. |
-| `/settings` | `frontend/src/pages/Settings.jsx` | Global application settings (colors, defaults). |
+| `/project/:id` | `frontend/src/pages/Editor.jsx` | Main editor interface. |
+| `/settings` | `frontend/src/pages/Settings.jsx` | Global application settings. |
 
-### Component Hierarchy (Key Components)
-The UI is composed of several major functional blocks.
+### Component Hierarchy (Editor)
+The `Editor.jsx` component orchestrates the workspace based on the current mode (Design vs. Layout).
 
-- **`App.jsx`**: Root component handling routing and initial global data fetching.
-- **`Editor.jsx`**: The central workspace. Orchestrates:
-    - **`UnifiedSidebar.jsx`**: Left panel for selecting assets/tools.
-    - **`DesignCanvas.jsx`**: Canvas for editing individual assets (shapes, polygons).
-    - **`LayoutCanvas.jsx`**: Canvas for placing instances (rooms, furniture) into a floor plan.
-    - **`DesignProperties.jsx`**: Right panel for editing properties of selected shapes in Design Mode.
-    - **`LayoutProperties.jsx`**: Right panel for editing properties of selected instances in Layout Mode.
+- **`Editor`**
+    - **`UnifiedSidebar`**: Tool selection.
+    - **`DesignCanvas`** (in Design Mode):
+        - Renders `DesignCanvasRender`.
+        - Handles Asset creation/editing (Shapes, Polygons).
+    - **`LayoutCanvas`** (in Layout Mode):
+        - Handles Room layout (Placing Instances).
+    - **`DesignProperties`** / **`LayoutProperties`**: Right-side panel for property editing.
 
 ### State Management (Zustand)
 Located in `frontend/src/store/`.
@@ -54,21 +55,21 @@ Key methods:
 
 ---
 
-## 2. Deep Dive: Room Generator (Design Canvas)
+## 2. Design Canvas Logic (Room Generator)
 
-The core "Room Generator" functionality resides in the **Design Mode** of the Editor, where users create and modify shape-based assets.
+The `DesignCanvas` is the core component for creating assets. It handles complex interactions like dragging, resizing, and vertex editing.
 
 *   **Primary Component:** `frontend/src/components/DesignCanvas.jsx`
-*   **Business Logic:** `frontend/src/components/DesignCanvas.logic.js`
+*   **Logic Module:** `frontend/src/components/DesignCanvas.logic.js`
 
 ### Data Flow
 
-1.  **User Action:** Mouse Down/Move/Up on `DesignCanvas`.
-2.  **Event Handling:** `DesignCanvas.jsx` captures events.
-3.  **Logic Execution:** Events are delegated to pure functions in `DesignCanvas.logic.js` (e.g., `initiateDraggingShape`, `processDraggingShape`).
-4.  **State Calculation:** Logic functions return *modified copies* of asset entities.
-5.  **State Update:** `DesignCanvas.jsx` calls `updateLocalEntities` -> `setLocalAssets` (Zustand Store).
-6.  **Persistence:** `useAutoSave` hook detects store changes and syncs with Backend via `App.SaveProjectData`.
+1.  **User Action:** Mouse Down/Move/Up on Canvas.
+2.  **Event Handling:** `DesignCanvas.jsx` captures events (e.g., `onPointerMove`).
+3.  **Logic Execution:** Events are delegated to pure functions in `DesignCanvas.logic.js` (e.g., `processDraggingShape`).
+4.  **State Calculation:** Logic functions return a **new copy** of the modified entities.
+5.  **State Update:** `DesignCanvas.jsx` calls `updateLocalEntities`, which updates the React state (`localAsset`) for smooth rendering.
+6.  **Commit:** On `onPointerUp`, the changes are committed to the global Zustand store (`projectSlice`), triggering `useAutoSave`.
 
 ### Function Inventory (`DesignCanvas.logic.js`)
 
