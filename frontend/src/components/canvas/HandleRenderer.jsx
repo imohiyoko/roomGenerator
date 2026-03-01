@@ -37,7 +37,7 @@ export const HandleRenderer = ({ shape, index, selectedPointIndex, onDown, onDel
                 const rys = (shape.ry ?? 50) * BASE_SCALE;
 
                 const startRad = toSvgRotation(shape.startAngle ?? 0) * Math.PI / 180;
-                const endRad = toSvgRotation(shape.endAngle ?? 360) * Math.PI / 180;
+                const endRad = toSvgRotation(shape.endAngle || 360) * Math.PI / 180;
 
                 const sx = cx + rxs * Math.cos(startRad);
                 const sy = cy + rys * Math.sin(startRad);
