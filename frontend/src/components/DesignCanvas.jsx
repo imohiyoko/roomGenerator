@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
-import { createRectPath, toSvgY, deepClone, calculateAssetBounds, getRotatedAABB } from '../lib/utils';
+import { createRectPath, toSvgY, deepClone, calculateAssetBounds } from '../lib/utils';
 import { useStore } from '../store';
 import { GridRenderer } from './canvas/GridRenderer';
 import { ShapeRenderer } from './canvas/ShapeRenderer';

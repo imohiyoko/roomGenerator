@@ -36,12 +36,13 @@ export const ShapeRenderer = ({ shape, index, isSelected, assetColor, onDown }) 
                     cy={toSvgY(shape.y + shape.h / 2) * BASE_SCALE}
                     rx={shape.w * BASE_SCALE / 2}
                     ry={shape.h * BASE_SCALE / 2}
+                    transform={rotateTransform}
                     {...style}
                 />
             ) : shape.type === 'ellipse' ? (
                 <path d={generateEllipsePath(shape)} transform={rotateTransform} {...style} />
             ) : (
-                <path d={generateSvgPath(shape.points)} {...style} />
+                <path d={generateSvgPath(shape.points)} transform={rotateTransform} {...style} />
             )}
         </g>
     );

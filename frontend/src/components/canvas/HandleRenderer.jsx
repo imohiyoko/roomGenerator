@@ -31,13 +31,13 @@ export const HandleRenderer = ({ shape, index, selectedPointIndex, onDown, onDel
         <g>
             {/* 楕円のハンドル */}
             {shape.type === 'ellipse' && (() => {
-                const cx = (shape.cx || 0) * BASE_SCALE;
-                const cy = toSvgY(shape.cy || 0) * BASE_SCALE;
-                const rxs = (shape.rx || 50) * BASE_SCALE;
-                const rys = (shape.ry || 50) * BASE_SCALE;
+                const cx = (shape.cx ?? 0) * BASE_SCALE;
+                const cy = toSvgY(shape.cy ?? 0) * BASE_SCALE;
+                const rxs = (shape.rx ?? 50) * BASE_SCALE;
+                const rys = (shape.ry ?? 50) * BASE_SCALE;
 
-                const startRad = toSvgRotation(shape.startAngle || 0) * Math.PI / 180;
-                const endRad = toSvgRotation(shape.endAngle || 360) * Math.PI / 180;
+                const startRad = toSvgRotation(shape.startAngle ?? 0) * Math.PI / 180;
+                const endRad = toSvgRotation(shape.endAngle ?? 360) * Math.PI / 180;
 
                 const sx = cx + rxs * Math.cos(startRad);
                 const sy = cy + rys * Math.sin(startRad);
@@ -77,6 +77,7 @@ export const HandleRenderer = ({ shape, index, selectedPointIndex, onDown, onDel
 
             {/* ポリゴンのハンドル */}
             {shape.type === 'polygon' && (() => {
+                if (!shape.points?.length) return null;
                 const maxX = Math.max(...shape.points.map(p => p.x));
                 const maxY = Math.max(...shape.points.map(p => p.y));
 

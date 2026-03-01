@@ -16,14 +16,18 @@ export const GridRenderer = ({ asset }) => {
 
             {/* アセットのバウンディングボックス */}
             {asset && (() => {
-                const bx = (asset.boundX || 0) * BASE_SCALE;
-                const by = toSvgY((asset.boundY || 0) + asset.h) * BASE_SCALE;
+                const boundX = asset.boundX ?? 0;
+                const boundY = asset.boundY ?? 0;
+                const width = asset.w ?? 0;
+                const height = asset.h ?? 0;
+                const bx = boundX * BASE_SCALE;
+                const by = toSvgY(boundY + height) * BASE_SCALE;
                 return (
                     <rect
                         x={bx}
                         y={by}
-                        width={asset.w * BASE_SCALE}
-                        height={asset.h * BASE_SCALE}
+                        width={width * BASE_SCALE}
+                        height={height * BASE_SCALE}
                         fill="none"
                         stroke="blue"
                         strokeWidth="1"

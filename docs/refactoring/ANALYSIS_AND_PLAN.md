@@ -60,7 +60,7 @@ Editor.jsx (ページ)
 ### 3.2 `frontend/src/components/canvas/` (新規ディレクトリ)
 
 *   **`GridRenderer.jsx`**
-    *   無限グリッド、軸線、原点、およびアセット全体のバウンディングボックスを描画します。
+    *   軸線、原点、およびアセット全体のバウンディングボックスを描画します。
 *   **`ShapeRenderer.jsx`**
     *   `type` (rect, circle, ellipse, polygon) に基づいて、エンティティの基本形状を描画します。
     *   SVG空間での回転変換（`transform="rotate(...)"`）を処理します。
