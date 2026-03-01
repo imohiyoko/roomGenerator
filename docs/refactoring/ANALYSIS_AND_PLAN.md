@@ -48,14 +48,30 @@ Editor.jsx (ページ)
     *   `API.saveProjectData` を呼び出します。
     *   バックエンド（`app.go`）がデータを `data/project_{id}.json` に保存します。
 
-## 3. 関数インベントリ
+## 3. 関数インベントリと状態管理
 
-### 3.1 `frontend/src/components/DesignCanvas.jsx`
+### 3.1 `frontend/src/components/DesignCanvas.jsx` と `useCanvasInteraction.js`
 
 *   **`DesignCanvas` (メインコンポーネント)**
-    *   ローカル状態（`localAsset`, `cursorMode`, `marquee`）を管理します。
-    *   イベントリスナー（`handleDown`, `handleMove`, `handleUp`）を設定し、`DesignCanvas.logic.js` に処理を委譲します。
+    *   Reactのレンダリングライフサイクルとローカル状態（`localAsset`）を管理します。
+    *   複雑なイベントハンドリングは `useCanvasInteraction` カスタムフックに委譲し、ビューとロジックを分離しています。
     *   `GridRenderer`, `ShapeRenderer`, `HandleRenderer` を組み合わせてSVGを構築します。
+
+*   **`useCanvasInteraction` (カスタムフック)**
+    *   `frontend/src/hooks/useCanvasInteraction.js` に配置。
+    *   ポインターイベントの状態機械（`dragRef`, `cursorMode`, `marquee`）をカプセル化。
+    *   `handleDown`, `handleMove`, `handleUp` イベントハンドラを提供し、`DesignCanvas.logic.js` の純粋関数群を呼び出して実際の処理を行います。
+
+### 3.1.5 状態管理と Undo/Redo (Zustand + zundo)
+グローバル状態は `frontend/src/store/` 内で管理されています。
+*   **`projectSlice.js`**: プロジェクト固有のデータ（`localAssets`, `instances`, `defaultColors`）を管理します。
+*   **`index.js` (Store Root)**: `zundo` ミドルウェアを使用して Undo/Redo を実装。パフォーマンスと履歴の肥大化を防ぐため、`localAssets` と `instances` のみを履歴保存の対象（`partialize`）としています。
+
+### 3.1.6 バックエンドとのデータ連携
+データの保存・読み込みは `frontend/src/lib/api.js` を経由して Go バックエンド（`app.go`）と通信します。
+
+*   **`SaveProjectData(id string, data interface{})`**: フロントエンドから受け取った JSON をパースし、`ProjectData` 構造体としてバリデーションした上で、`data/project_{id}.json` に保存します。
+*   **`GetProjectData(id string)`**: プロジェクトファイルを読み込み、必要に応じてレガシーデータ（`shapes` 配列など）を新しい形式（`entities`）にマイグレーションして返します。
 
 ### 3.2 `frontend/src/components/canvas/` (新規ディレクトリ)
 
@@ -92,8 +108,17 @@ Editor.jsx (ページ)
 4.  **ハンドル:** 専用の操作ハンドルが必要な場合は `frontend/src/components/canvas/HandleRenderer.jsx` にUIを追加します。
 5.  **プロパティ:** `DesignProperties.jsx` にプロパティエディタのコントロールを追加します。
 
+**詳細なインタラクションワークフロー:**
+1.  **イベント発火:** ユーザーがキャンバス上でマウスを操作（down, move, up）。
+2.  **イベントハンドラ (`useCanvasInteraction.js`):** `handleMove` などがトリガーされ、`dragRef.current.mode` に基づいて操作を分岐。
+3.  **純粋関数ロジック (`DesignCanvas.logic.js`):** 座標計算や変換処理（`processDraggingShape` など）を実行し、新しい `entities` 配列を生成。
+4.  **ローカル状態更新 (`DesignCanvas.jsx`):** `updateLocalEntities` または `updateLocalAssetState` を通じて、Reactのローカル状態（`localAsset`）を更新。これにより60fpsの高フレームレート描画を実現。
+5.  **グローバルストアへのコミット:** マウス操作完了時（`handleUp`）、最終的な状態が Zustand の `setLocalAssets` に渡され、グローバルストアが更新されると同時に Undo 履歴が追加される。
+6.  **自動保存:** `useAutoSave` フックがストアの変更を検知し、バックエンドの `SaveProjectData` を呼び出し。
+
 **バグの切り分けと修正:**
 1.  **表示がおかしい（色、形、位置がずれている）:** `ShapeRenderer` または `HandleRenderer` を確認してください。
 2.  **ドラッグ時の動きがおかしい、座標計算が間違っている:** `DesignCanvas.logic.js` の各種 `process...` 関数を確認してください。
 3.  **背景やグリッドがおかしい:** `GridRenderer` を確認してください。
-4.  **保存されない、またはリロードすると消える:** `DesignCanvas.jsx` の `handleUp` での `updateLocalAssetState` 呼び出し、または Zustand ストアの状態更新を確認してください。
+4.  **イベントが発火しない、モードが切り替わらない:** `useCanvasInteraction.js` のイベントハンドラを確認してください。
+5.  **保存されない、またはリロードすると消える:** `useCanvasInteraction.js` の `handleUp` での `updateLocalAssetState` 呼び出し、または Zustand ストアの状態更新を確認してください。
