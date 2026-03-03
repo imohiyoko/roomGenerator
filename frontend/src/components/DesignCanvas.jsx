@@ -121,8 +121,8 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
                                                 // StartAngle (Cartesian) -> -StartAngle (SVG).
                                                 // 0 is East.
 
-                                                const startRad = toSvgRotation(s.startAngle || 0) * Math.PI / 180;
-                                                const endRad = toSvgRotation(s.endAngle || 360) * Math.PI / 180;
+                                                const startRad = toSvgRotation(s.startAngle !== undefined ? s.startAngle : 0) * Math.PI / 180;
+                                                const endRad = toSvgRotation(s.endAngle !== undefined ? s.endAngle : 360) * Math.PI / 180;
 
                                                 const sx = cx + rxs * Math.cos(startRad);
                                                 const sy = cy + rys * Math.sin(startRad);
