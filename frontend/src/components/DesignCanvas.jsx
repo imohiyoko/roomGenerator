@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
-import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, calculateAssetBounds, getRotatedAABB } from '../lib/utils';
+import { createRectPath, toSvgY, deepClone, calculateAssetBounds } from '../lib/utils';
 import { useStore } from '../store';
+import { GridRenderer } from './canvas/GridRenderer';
+import { ShapeRenderer } from './canvas/ShapeRenderer';
+import { HandleRenderer } from './canvas/HandleRenderer';
 import {
     initiatePanning, initiateMarquee, initiateResizing, initiateDraggingHandle,
     initiateDraggingAngle, initiateDraggingRotation, initiateDraggingRadius,
@@ -62,15 +65,10 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
         >
             <svg width="3000" height="3000" style={{ minWidth: '3000px', minHeight: '3000px' }}>
                 <g transform={`translate(${viewState.x}, ${viewState.y}) scale(${viewState.scale})`}>
-                    <line x1="-5000" y1="0" x2="5000" y2="0" stroke="#ccc" strokeWidth="2" />
-                    <line x1="0" y1="-5000" x2="0" y2="5000" stroke="#ccc" strokeWidth="2" />
-                    <circle cx="0" cy="0" r="5" fill="red" opacity="0.5" />
-                    {asset && (() => {
-                        // Asset Bounding Box (Cartesian to SVG)
-                        // Cartesian: boundX, boundY (Bottom-Left), w, h.
-                        // SVG Rect: x=boundX, y=-(boundY+h), w, h
-                        const bx = (asset.boundX || 0) * BASE_SCALE;
-                        const by = toSvgY((asset.boundY || 0) + asset.h) * BASE_SCALE;
+                    <GridRenderer asset={asset} />
+
+                    {asset && entities.map((shape, i) => {
+                        const isSelected = selectedShapeIndices.includes(i);
                         return (
                             <g>
                                 <rect x={bx} y={by} width={asset.w * BASE_SCALE} height={asset.h * BASE_SCALE} fill="none" stroke="blue" strokeWidth="1" strokeDasharray="4 2" opacity="0.3" pointerEvents="none" />
@@ -237,7 +235,7 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
                                 })}
                             </g>
                         );
-                    })()}
+                    })}
                 </g>
             </svg>
             {marquee && (
