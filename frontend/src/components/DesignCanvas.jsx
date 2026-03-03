@@ -1,10 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
-import { createRectPath, toSvgY, deepClone, calculateAssetBounds } from '../lib/utils';
+import { generateSvgPath, generateEllipsePath, createRectPath, toSvgY, toCartesianY, toSvgRotation, toCartesianRotation, deepClone, calculateAssetBounds, getRotatedAABB } from '../lib/utils';
 import { useStore } from '../store';
-import { GridRenderer } from './canvas/GridRenderer';
-import { ShapeRenderer } from './canvas/ShapeRenderer';
-import { HandleRenderer } from './canvas/HandleRenderer';
 import {
     initiatePanning, initiateMarquee, initiateResizing, initiateDraggingHandle,
     initiateDraggingAngle, initiateDraggingRotation, initiateDraggingRadius,
@@ -65,31 +62,179 @@ const DesignCanvasRender = ({ viewState, asset, entities, selectedShapeIndices, 
         >
             <svg width="3000" height="3000" style={{ minWidth: '3000px', minHeight: '3000px' }}>
                 <g transform={`translate(${viewState.x}, ${viewState.y}) scale(${viewState.scale})`}>
-                    <GridRenderer asset={asset} />
-
-                    {asset && entities.map((shape, i) => {
-                        const isSelected = selectedShapeIndices.includes(i);
+                    <line x1="-5000" y1="0" x2="5000" y2="0" stroke="#ccc" strokeWidth="2" />
+                    <line x1="0" y1="-5000" x2="0" y2="5000" stroke="#ccc" strokeWidth="2" />
+                    <circle cx="0" cy="0" r="5" fill="red" opacity="0.5" />
+                    {asset && (() => {
+                        const bx = (asset.boundX || 0) * BASE_SCALE;
+                        const by = toSvgY((asset.boundY || 0) + asset.h) * BASE_SCALE;
                         return (
-                            <g key={i}>
-                                <ShapeRenderer
-                                    shape={shape}
-                                    index={i}
-                                    isSelected={isSelected}
-                                    assetColor={asset.color}
-                                    onDown={onDown}
-                                />
-                                {isSelected && (
-                                    <HandleRenderer
-                                        shape={shape}
-                                        index={i}
-                                        selectedPointIndex={selectedPointIndex}
-                                        onDown={onDown}
-                                        onDeleteShape={onDeleteShape}
-                                    />
-                                )}
+                            <g>
+                                <rect x={bx} y={by} width={asset.w * BASE_SCALE} height={asset.h * BASE_SCALE} fill="none" stroke="blue" strokeWidth="1" strokeDasharray="4 2" opacity="0.3" pointerEvents="none" />
+
+                                {entities.map((s, i) => {
+                                    const isSelected = selectedShapeIndices.includes(i);
+                                    const style = { fill: s.color || asset.color, stroke: isSelected ? "#3b82f6" : "#999", strokeWidth: isSelected ? 2 : 1, cursor: 'move' };
+
+                                    // Rotation logic (Cartesian CCW -> SVG CW)
+                                    const rot = s.rotation ? toSvgRotation(s.rotation) : 0;
+
+                                    // Rotation Center logic
+                                    // For Ellipse: center is cx, cy.
+                                    // For Rect/Polygon: center is usually center of bounds, but logic uses s.x/y or cx/cy.
+                                    // Helper to get center in SVG coords
+                                    let cx_svg = 0, cy_svg = 0;
+                                    if (s.type === 'ellipse' || s.type === 'circle' || s.type === 'arc') {
+                                        cx_svg = (s.cx !== undefined ? s.cx : (s.x + s.w/2)) * BASE_SCALE;
+                                        cy_svg = toSvgY(s.cy !== undefined ? s.cy : (s.y + s.h/2)) * BASE_SCALE;
+                                    } else {
+                                        cx_svg = ((s.x || 0) + (s.w || 0) / 2) * BASE_SCALE;
+                                        cy_svg = toSvgY((s.y || 0) + (s.h || 0) / 2) * BASE_SCALE;
+                                    }
+
+                                    const rotateTransform = rot ? `rotate(${rot} ${cx_svg} ${cy_svg})` : '';
+
+                                    return (
+                                        <g key={i} onPointerDown={(e) => onDown(e, i)}>
+                                            {s.type === 'circle'
+                                                ? <ellipse cx={(s.x + s.w / 2) * BASE_SCALE} cy={toSvgY(s.y + s.h / 2) * BASE_SCALE} rx={s.w * BASE_SCALE / 2} ry={s.h * BASE_SCALE / 2} {...style} />
+                                                : s.type === 'ellipse'
+                                                    ? <path d={generateEllipsePath(s)} transform={rotateTransform} {...style} />
+                                                    : <path d={generateSvgPath(s.points)} {...style} />
+                                            }
+                                            {/* Ellipse Handles */}
+                                            {isSelected && s.type === 'ellipse' && (() => {
+                                                const cx = (s.cx || 0) * BASE_SCALE;
+                                                const cy = toSvgY(s.cy || 0) * BASE_SCALE;
+                                                const rxs = (s.rx || 50) * BASE_SCALE;
+                                                const rys = (s.ry || 50) * BASE_SCALE;
+
+                                                // Handle Positions in SVG Space (Visual)
+                                                // Rotation is applied to the GROUP, so we draw handles in LOCAL unrotated SVG space relative to center?
+                                                // generateEllipsePath generates path. rotateTransform rotates it around center.
+                                                // So if we put handles inside <g transform={rotateTransform}>, they should align.
+
+                                                // SVG Angles for handle placement:
+                                                // StartAngle (Cartesian) -> -StartAngle (SVG).
+                                                // 0 is East.
+
+                                                const startRad = toSvgRotation(s.startAngle !== undefined ? s.startAngle : 0) * Math.PI / 180;
+                                                const endRad = toSvgRotation(s.endAngle !== undefined ? s.endAngle : 360) * Math.PI / 180;
+
+                                                const sx = cx + rxs * Math.cos(startRad);
+                                                const sy = cy + rys * Math.sin(startRad);
+                                                const ex = cx + rxs * Math.cos(endRad);
+                                                const ey = cy + rys * Math.sin(endRad);
+
+                                                const rotHandleY = cy - rys - 20; // Visual handle above top
+
+                                                return (
+                                                    <g transform={rotateTransform}>
+                                                        <circle cx={cx} cy={cy} r="6" fill="red" stroke="white" strokeWidth="2" className="cursor-move" />
+                                                        {/* Width Handle (Right) */}
+                                                        <rect x={cx + rxs - 4} y={cy - 4} width="8" height="8" fill="orange" stroke="white" strokeWidth="1" className="cursor-ew-resize" onPointerDown={(e) => onDown(e, i, 'rx')} />
+                                                        {/* Height Handle (Bottom in SVG, Top in Cartesian? ry is radius so direction symmetric) */}
+                                                        <rect x={cx - 4} y={cy + rys - 4} width="8" height="8" fill="orange" stroke="white" strokeWidth="1" className="cursor-ns-resize" onPointerDown={(e) => onDown(e, i, 'ry')} />
+
+                                                        {/* Corner Handle */}
+                                                        <rect x={cx + rxs - 4} y={cy + rys - 4} width="8" height="8" fill="yellow" stroke="orange" strokeWidth="1" className="cursor-nwse-resize" onPointerDown={(e) => onDown(e, i, 'rxy')} />
+
+                                                        {/* Rotation Handle */}
+                                                        <line x1={cx} y1={cy - rys} x2={cx} y2={rotHandleY} stroke="cyan" strokeWidth="1" strokeDasharray="3,2" />
+                                                        <circle cx={cx} cy={rotHandleY} r="5" fill="cyan" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'rotation')} />
+
+                                                        {/* Angle Handles */}
+                                                        <line x1={cx} y1={cy} x2={sx * 0.6 + cx * 0.4} y2={sy * 0.6 + cy * 0.4} stroke="green" strokeWidth="1" strokeDasharray="3,2" />
+                                                        <line x1={cx} y1={cy} x2={ex * 0.6 + cx * 0.4} y2={ey * 0.6 + cy * 0.4} stroke="purple" strokeWidth="1" strokeDasharray="3,2" />
+                                                        <circle cx={sx * 0.6 + cx * 0.4} cy={sy * 0.6 + cy * 0.4} r="5" fill="green" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'startAngle')} />
+                                                        <circle cx={ex * 0.6 + cx * 0.4} cy={ey * 0.6 + cy * 0.4} r="5" fill="purple" stroke="white" strokeWidth="1" className="cursor-pointer" onPointerDown={(e) => onDown(e, i, 'endAngle')} />
+                                                    </g>
+                                                );
+                                            })()}
+                                            {/* Ellipse Delete Button */}
+                                            {isSelected && s.type === 'ellipse' && (() => {
+                                                const bounds = getRotatedAABB(s);
+                                                if (!bounds) return null;
+                                                const { maxX, maxY } = bounds;
+                                                return (
+                                                    <g transform={`translate(${maxX * BASE_SCALE + 10}, ${toSvgY(maxY) * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(e, i)}>
+                                                        <circle r="8" fill="red" />
+                                                        <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
+                                                    </g>
+                                                );
+                                            })()}
+                                            {/* Polygon Points */}
+                                            {isSelected && s.type === 'polygon' && s.points.map((p, pid) => (
+                                                <React.Fragment key={pid}>
+                                                    <circle cx={p.x * BASE_SCALE} cy={toSvgY(p.y) * BASE_SCALE} r="5" fill={selectedPointIndex === pid ? "red" : "white"} stroke="blue" strokeWidth="2" className="cursor-crosshair" onPointerDown={(e) => onDown(e, i, pid)} />
+                                                    {p.handles && p.handles.map((h, hid) => (
+                                                        <React.Fragment key={`h-${pid}-${hid}`}>
+                                                            <line x1={p.x * BASE_SCALE} y1={toSvgY(p.y) * BASE_SCALE} x2={h.x * BASE_SCALE} y2={toSvgY(h.y) * BASE_SCALE} stroke="orange" strokeWidth="1" strokeDasharray="3,2" />
+                                                            <rect x={h.x * BASE_SCALE - 4} y={toSvgY(h.y) * BASE_SCALE - 4} width="8" height="8" fill="orange" stroke="darkorange" strokeWidth="1" className="cursor-move" onPointerDown={(e) => onDown(e, i, pid, null, hid)} />
+                                                        </React.Fragment>
+                                                    ))}
+                                                </React.Fragment>
+                                            ))}
+                                            {/* Rect/Polygon Bounds Delete Button */}
+                                            {isSelected && s.type === 'polygon' && (() => {
+                                                const maxX = Math.max(...s.points.map(p => p.x));
+                                                const minY = Math.min(...s.points.map(p => p.y)); // Cartesian Min Y
+                                                // SVG Max Y corresponds to Cartesian Min Y (Bottom)
+                                                // SVG Min Y corresponds to Cartesian Max Y (Top)
+                                                // Where to put the delete button? Top-Right?
+                                                // Top-Right Cartesian: MaxX, MaxY.
+                                                // Top-Right SVG: MaxX, toSvgY(MaxY).
+                                                const maxY = Math.max(...s.points.map(p => p.y));
+
+                                                return (
+                                                    <g transform={`translate(${maxX * BASE_SCALE + 10}, ${toSvgY(maxY) * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(e, i)}>
+                                                        <circle r="8" fill="red" />
+                                                        <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
+                                                    </g>
+                                                );
+                                            })()}
+                                            {/* Rect Resizers */}
+                                            {isSelected && (s.type === 'circle' || s.type === 'rect') && (
+                                                <g>
+                                                    {/* Rect Corners in SVG Space */}
+                                                    {/* Top-Right: x+w, y+h (Cartesian) -> x+w, -(y+h) (SVG) */}
+                                                    {/* Bottom-Right: x+w, y (Cartesian) -> x+w, -y (SVG) */}
+                                                    {/* Bottom-Center: x+w/2, y -> ... */}
+
+                                                    {/* Note: s.y is Bottom-Left Y in Cartesian */}
+
+                                                    {/* Resize Both (Bottom-Right visual?) */}
+                                                    {/* Usually Resizer is at Bottom-Right in SVG logic (Max X, Max Y). */}
+                                                    {/* In Cartesian, Bottom-Right is (x+w, y). SVG: (x+w, -y). */}
+
+                                                    {/* Resize Width (Right Center) */}
+
+                                                    {/* Resize Height (Top Center? or Bottom Center?) */}
+
+                                                    {/* Let's place handles at visual corners */}
+                                                    {/* Top-Right Visual: Cartesian (x+w, y+h). SVG (x+w, -(y+h)) */}
+
+                                                    <rect x={(s.x + s.w) * BASE_SCALE - 5} y={toSvgY(s.y + s.h) * BASE_SCALE - 5} width="10" height="10" fill="yellow" stroke="blue" strokeWidth="2" className="cursor-nwse-resize" onPointerDown={(e) => onDown(e, i, null, 'both')} />
+
+                                                    {/* Width (Right) */}
+                                                    <rect x={(s.x + s.w) * BASE_SCALE - 5} y={toSvgY(s.y + s.h / 2) * BASE_SCALE - 5} width="10" height="10" fill="lightblue" stroke="blue" strokeWidth="2" className="cursor-ew-resize" onPointerDown={(e) => onDown(e, i, null, 'horizontal')} />
+
+                                                    {/* Height (Top) - In Cartesian, Top is y+h */}
+                                                    <rect x={(s.x + s.w / 2) * BASE_SCALE - 5} y={toSvgY(s.y + s.h) * BASE_SCALE - 5} width="10" height="10" fill="lightgreen" stroke="blue" strokeWidth="2" className="cursor-ns-resize" onPointerDown={(e) => onDown(e, i, null, 'vertical')} />
+
+                                                    {/* Delete Button (Top-Right + offset) */}
+                                                    <g transform={`translate(${(s.x + s.w) * BASE_SCALE + 10}, ${toSvgY(s.y + s.h) * BASE_SCALE - 10})`} className="cursor-pointer" onPointerDown={(e) => onDeleteShape(e, i)}>
+                                                        <circle r="8" fill="red" />
+                                                        <line x1="-4" y1="-4" x2="4" y2="4" stroke="white" strokeWidth="2" /><line x1="4" y1="-4" x2="-4" y2="4" stroke="white" strokeWidth="2" />
+                                                    </g>
+                                                </g>
+                                            )}
+                                        </g>
+                                    );
+                                })}
                             </g>
                         );
-                    })}
+                    })()}
                 </g>
             </svg>
             {marquee && (

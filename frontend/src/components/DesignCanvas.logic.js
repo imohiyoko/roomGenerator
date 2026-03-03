@@ -443,7 +443,9 @@ export const processDraggingAngle = (e, dragRefState, currentAsset, selectedShap
     const angleCart = toCartesianRotation(angleSvg);
 
     const deg = (angleCart + 360) % 360;
-    const snapped = e.shiftKey ? deg : (Math.round(deg / 15) * 15) % 360;
+    let snapped = e.shiftKey ? deg : (Math.round(deg / 15) * 15) % 360;
+    // endAngle は (0, 360] に正規化（0 だとフル楕円が描けなくなるため）
+    if (dragRefState.targetProp === 'endAngle' && snapped === 0) snapped = 360;
 
     const newEntities = deepClone(currentAsset.entities);
     newEntities[targetIdx][dragRefState.targetProp] = snapped;
