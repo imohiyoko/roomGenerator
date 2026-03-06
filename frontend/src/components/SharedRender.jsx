@@ -1,6 +1,6 @@
 import React from 'react';
 import { BASE_SCALE } from '../lib/constants';
-import { generateEllipsePath, generateSvgPath, createRectPath, toSvgY, toSvgRotation } from '../lib/utils';
+import { generateEllipsePath, generateSvgPath, createRectPath, toSvgY, toSvgRotation } from '../domain/geometry.js';
 
 export const RenderAssetShapes = ({ item, isSelected }) => {
     // Fallback for migration

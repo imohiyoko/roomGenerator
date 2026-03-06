@@ -1,6 +1,7 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { BASE_SCALE, SNAP_UNIT, LAYERS } from '../lib/constants';
-import { toMM, toSvgY, toCartesianY, toSvgRotation } from '../lib/utils';
+import { toMM } from '../lib/utils.js';
+import { toSvgY, toCartesianY, toSvgRotation } from '../domain/geometry.js';
 import { RenderAssetShapes } from './SharedRender';
 import { useStore } from '../store';
 

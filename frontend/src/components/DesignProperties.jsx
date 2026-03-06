@@ -2,7 +2,8 @@ import React from 'react';
 import { Icon, Icons } from './Icon';
 import { ColorPicker } from './ColorPicker';
 import { NumberInput } from './NumberInput';
-import { fromMM, toMM, createRectPath, createTrianglePath, deepClone, calculateAssetBounds } from '../lib/utils';
+import { fromMM, toMM, deepClone } from '../lib/utils.js';
+import { createRectPath, createTrianglePath, calculateAssetBounds } from '../domain/geometry.js';
 import { updateAssetEntities } from '../domain/assetService';
 import { useStore } from '../store';
 

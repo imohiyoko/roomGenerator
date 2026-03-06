@@ -1,7 +1,7 @@
 import React from 'react';
 import { useStore } from '../store';
 import { Icon, Icons } from './Icon';
-import { createRectPath } from '../lib/utils';
+import { createRectPath } from '../domain/geometry.js';
 
 export const UnifiedSidebar = ({ mode, assets, onAddInstance, onAddText, setLocalAssets, setGlobalAssets, setDesignTargetId, designTargetId, instances, setInstances, defaultColors }) => {
     const categoryLabels = useStore(state => state.categoryLabels);

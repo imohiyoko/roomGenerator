@@ -1,9 +1,80 @@
-import { deepClone, calculateAssetBounds } from '../lib/utils.js';
+import { deepClone } from '../lib/utils.js';
+import { calculateAssetBounds } from '../domain/geometry.js';
 import { BASE_SCALE } from '../lib/constants.js';
+
+/**
+ * @typedef {Object} Point
+ * @property {number} x
+ * @property {number} y
+ * @property {Object} [h1] - Handle 1 for Bezier curves {x,y}
+ * @property {Object} [h2] - Handle 2 for Bezier curves {x,y}
+ * @property {boolean} [isCurve]
+ * @property {Array<{x:number, y:number}>} [handles] - Specific handles for multi-segment curves
+ */
+
+/**
+ * @typedef {Object} Entity
+ * @property {string} type - 'polygon', 'circle', 'ellipse', 'arc', 'text', 'rect'
+ * @property {string} [layer='0']
+ * @property {string} [color]
+ * @property {number} [x]
+ * @property {number} [y]
+ * @property {number} [w]
+ * @property {number} [h]
+ * @property {Array<Point>} [points] - For 'polygon' type
+ * @property {number} [cx] - For 'circle'/'ellipse'/'arc'
+ * @property {number} [cy]
+ * @property {number} [rx]
+ * @property {number} [ry]
+ * @property {number} [startAngle] - For arcs
+ * @property {number} [endAngle]
+ * @property {string} [arcMode] - 'sector' or 'chord'
+ * @property {number} [rotation] - Rotation in degrees (Cartesian CCW)
+ * @property {string} [text] - For 'text' type
+ * @property {number} [fontSize]
+ */
+
+/**
+ * @typedef {Object} Asset
+ * @property {string} id
+ * @property {string} name
+ * @property {string} type - 'room', 'furniture', 'fixture'
+ * @property {number} w - Width (Cartesian)
+ * @property {number} h - Height (Cartesian)
+ * @property {number} [boundX] - Min X of AABB
+ * @property {number} [boundY] - Min Y of AABB
+ * @property {string} color
+ * @property {boolean} [isDefaultShape]
+ * @property {boolean} [snap]
+ * @property {Array<Entity>} entities
+ * @property {string} [source] - 'global' or undefined
+ */
+
+/**
+ * @typedef {Object} Instance
+ * @property {string} id
+ * @property {string} [assetId] - Reference to localAssets (undefined for 'text')
+ * @property {string} type - 'text' or asset.type
+ * @property {number} x
+ * @property {number} y
+ * @property {number} rotation
+ * @property {boolean} locked
+ * @property {string} [text]
+ * @property {number} [fontSize]
+ * @property {string} [color]
+ */
 
 // --- Logic from store.js ---
 
-// Updates an asset with new entities and recalculates its bounding box.
+/**
+ * Updates an asset with new entities and recalculates its bounding box.
+ * This ensures that any modification to entities (add, remove, edit)
+ * correctly updates the asset's overall dimensions and origin.
+ *
+ * @param {Asset} asset - The original asset
+ * @param {Array<Entity>} newEntities - The updated entities array
+ * @returns {Asset|null} The updated asset with recalculated bounds
+ */
 // This ensures that any modification to entities (add, remove, edit)
 // correctly updates the asset's overall dimensions and origin.
 export const updateAssetEntities = (asset, newEntities) => {

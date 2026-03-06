@@ -1,4 +1,5 @@
-import { deepClone, toSvgY, toCartesianY, toCartesianRotation } from '../lib/utils';
+import { deepClone } from '../lib/utils.js';
+import { toSvgY, toCartesianY, toCartesianRotation } from '../domain/geometry.js';
 import { BASE_SCALE, SNAP_UNIT } from '../lib/constants';
 
 /**
