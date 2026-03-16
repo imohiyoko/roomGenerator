@@ -37,7 +37,7 @@ Before you begin, ensure you have the following installed:
 
 ## 3. Project Architecture
 
-Please refer to [ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed map of the file structure, backend API, and data flow.
+Please refer to [docs/refactoring/ANALYSIS_AND_PLAN.md](docs/refactoring/ANALYSIS_AND_PLAN.md) for a detailed map of the system structure, data flow, component hierarchy, and refactoring guidelines.
 
 ## 4. Code Style & Patterns
 

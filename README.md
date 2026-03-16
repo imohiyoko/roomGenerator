@@ -45,13 +45,15 @@ wails build
 ```
 `build/bin` ディレクトリに実行ファイルが生成されます。
 
-## プロジェクト構成
+## プロジェクト構成・アーキテクチャ
+
+詳細なシステム構成、コンポーネント階層、データフロー、および今後のリファクタリング計画については、**[docs/refactoring/ANALYSIS_AND_PLAN.md](docs/refactoring/ANALYSIS_AND_PLAN.md)** を参照してください。
 
 - `main.go`: アプリケーションのエントリーポイント
 - `app.go`: バックエンドロジック (API)
 - `frontend/`: フロントエンド (React + Vite)
   - `src/`: ソースコード
-    - `lib/store.js`: **状態管理（Zustand + zundo）** - アプリケーションの主要な状態とアクションはここにあります。
+    - `store/`: **状態管理（Zustand + zundo）** - アプリケーションの主要な状態とアクションはここにあります。
     - `App.jsx`: メインUIコンポーネント - ストアを使用して描画します。
 - `data/`: 保存されたプロジェクトデータ
 
