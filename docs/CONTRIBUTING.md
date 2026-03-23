@@ -34,9 +34,9 @@ roomGenerator/
     ```
     This command starts both the Go backend and the Vite frontend dev server.
 
-3.  **Architecture:**
-    Please refer to [ARCHITECTURE.md](./ARCHITECTURE.md) for a detailed overview of the system design.
-    For a comprehensive map of functions, components, and URLs, see [SYSTEM_MAP.md](./SYSTEM_MAP.md).
+3.  **Architecture & Refactoring Guide:**
+    Please refer to [ARCHITECTURE.md](./ARCHITECTURE.md) for a high-level overview of the system design.
+    For a comprehensive and up-to-date guide on components, state management (Zustand), URL routing, and refactoring guidelines, you **must** refer to [ANALYSIS_AND_PLAN.md](./refactoring/ANALYSIS_AND_PLAN.md). This document serves as the primary architectural guide for contributors.
 
 ## Key Concepts
 
