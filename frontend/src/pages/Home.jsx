@@ -1,9 +1,47 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { API } from '../lib/api';
 import { Icon, Icons } from '../components/Icon';
 import { Header } from '../components/Header';
+
+const InputModal = ({ title, defaultValue, onConfirm, onCancel }) => {
+    const [value, setValue] = useState(defaultValue);
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') onConfirm(value);
+        if (e.key === 'Escape') onCancel();
+    };
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onCancel}>
+            <div className="bg-white rounded-lg shadow-xl w-80 p-6" onClick={e => e.stopPropagation()}>
+                <h3 className="font-bold text-gray-700 mb-3">{title}</h3>
+                <input
+                    autoFocus
+                    className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                    value={value}
+                    onChange={e => setValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                />
+                <div className="flex justify-end gap-2 mt-4">
+                    <button onClick={onCancel} className="px-4 py-1.5 text-sm rounded border text-gray-600 hover:bg-gray-50">キャンセル</button>
+                    <button onClick={() => onConfirm(value)} className="px-4 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">OK</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ConfirmModal = ({ message, onConfirm, onCancel }) => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onCancel}>
+        <div className="bg-white rounded-lg shadow-xl w-80 p-6" onClick={e => e.stopPropagation()}>
+            <p className="text-gray-700 mb-4">{message}</p>
+            <div className="flex justify-end gap-2">
+                <button onClick={onCancel} className="px-4 py-1.5 text-sm rounded border text-gray-600 hover:bg-gray-50">キャンセル</button>
+                <button onClick={onConfirm} className="px-4 py-1.5 text-sm rounded bg-red-600 text-white hover:bg-red-700">削除</button>
+            </div>
+        </div>
+    </div>
+);
 
 const Home = () => {
     const navigate = useNavigate();
@@ -11,9 +49,19 @@ const Home = () => {
     const setProjects = useStore(state => state.setProjects);
 
     const fileInputRef = useRef(null);
+    const [modal, setModal] = useState(null);
+
+    const showInput = (title, defaultValue) =>
+        new Promise(resolve => setModal({ type: 'input', title, defaultValue, resolve }));
+
+    const showConfirm = (message) =>
+        new Promise(resolve => setModal({ type: 'confirm', message, resolve }));
+
+    const handleModalConfirm = (value) => { modal.resolve(value ?? true); setModal(null); };
+    const handleModalCancel = () => { modal.resolve(null); setModal(null); };
 
     const handleCreate = async () => {
-        const name = prompt("プロジェクト名を入力してください", "新しいプロジェクト");
+        const name = await showInput("プロジェクト名を入力してください", "新しいプロジェクト");
         if (!name) return;
         const newProj = await API.createProject(name);
         if (newProj) {
@@ -24,14 +72,15 @@ const Home = () => {
 
     const handleDelete = async (e, id) => {
         e.stopPropagation();
-        if (!confirm("プロジェクトを削除しますか？")) return;
+        const ok = await showConfirm("プロジェクトを削除しますか？");
+        if (!ok) return;
         await API.deleteProject(id);
         setProjects(prev => prev.filter(p => p.id !== id));
     };
 
     const handleRename = async (e, id, currentName) => {
         e.stopPropagation();
-        const newName = prompt("新しいプロジェクト名を入力してください", currentName);
+        const newName = await showInput("新しいプロジェクト名を入力してください", currentName);
         if (!newName || newName === currentName) return;
         await API.updateProjectName(id, newName);
         setProjects(prev => prev.map(p => p.id === id ? { ...p, name: newName } : p));
@@ -79,6 +128,8 @@ const Home = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
+            {modal?.type === 'input' && <InputModal title={modal.title} defaultValue={modal.defaultValue} onConfirm={handleModalConfirm} onCancel={handleModalCancel} />}
+            {modal?.type === 'confirm' && <ConfirmModal message={modal.message} onConfirm={() => handleModalConfirm(true)} onCancel={handleModalCancel} />}
             <Header title="ホーム" />
 
             <div className="flex-1 p-8 overflow-y-auto">
