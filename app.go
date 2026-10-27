@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 )
@@ -13,6 +14,19 @@ import (
 // --- 設定 ---
 const DATA_DIR_NAME = "data"
 const LOG_FILE = "app.log"
+
+// projectIDPattern はプロジェクトIDとして許可する文字列。
+// IDはファイル名 project_<id>.json の一部になるため、パス区切りや ".." を含むIDで
+// dataディレクトリの外を読み書き・削除できないよう、英数字・"_"・"-" のみに制限する。
+var projectIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+// projectFilePath は検証済みのIDからプロジェクトファイルのパスを返す
+func (a *App) projectFilePath(id string) (string, error) {
+	if !projectIDPattern.MatchString(id) {
+		return "", fmt.Errorf("invalid project id")
+	}
+	return filepath.Join(a.dataDir, fmt.Sprintf("project_%s.json", id)), nil
+}
 
 // --- データ構造 ---
 // 構造体は models.go に定義されています。
@@ -280,7 +294,11 @@ func (a *App) GetProjectData(id string) (ProjectData, error) {
 	if id == "" {
 		return ProjectData{}, fmt.Errorf("ID is empty")
 	}
-	projPath := filepath.Join(a.dataDir, fmt.Sprintf("project_%s.json", id))
+	projPath, err := a.projectFilePath(id)
+	if err != nil {
+		a.logError("不正なプロジェクトIDです (GetProjectData)")
+		return ProjectData{}, err
+	}
 
 	data, err := a.loadJSON(projPath)
 	if err != nil {
@@ -568,7 +586,11 @@ func getBool(m map[string]interface{}, key string) bool {
 
 // SaveProjectData saves project data
 func (a *App) SaveProjectData(id string, data interface{}) error {
-	projPath := filepath.Join(a.dataDir, fmt.Sprintf("project_%s.json", id))
+	projPath, err := a.projectFilePath(id)
+	if err != nil {
+		a.logError("不正なプロジェクトIDです (SaveProjectData)")
+		return err
+	}
 
 	// データ検証: 受け取ったデータをJSON化してProjectData構造体にマッピングできるか確認
 	bytes, err := json.Marshal(data)
@@ -599,7 +621,11 @@ func (a *App) SaveProjectData(id string, data interface{}) error {
 // DeleteProject deletes a project
 func (a *App) DeleteProject(id string) error {
 	indexPath := filepath.Join(a.dataDir, "projects_index.json")
-	projPath := filepath.Join(a.dataDir, fmt.Sprintf("project_%s.json", id))
+	projPath, err := a.projectFilePath(id)
+	if err != nil {
+		a.logError("不正なプロジェクトIDです (DeleteProject)")
+		return err
+	}
 
 	projects := []Project{}
 	data, _ := a.loadJSON(indexPath)
